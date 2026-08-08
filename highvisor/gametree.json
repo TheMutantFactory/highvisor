@@ -2380,9 +2380,17 @@
       "to": "genotype",
       "steps": [
         {
+          "hover": [
+            840,
+            563
+          ],
+          "window": "Raves of Qud",
+          "note": "SELECT Classic EXPLICITLY -- do not trust the default. Raves' cards select on mouse_entered, and the title->game_mode edge leaves the pointer at (958,532), which lands on card index 2 of the 5-card row: this edge silently confirmed ROLEPLAY while its note claimed Classic, so every route through it built the wrong character. Caught 2026-08-08 by reading the breadcrumb on Choose Caste, which said 'Roleplay | True Kin | Caste'. Parking the cursor on empty space does NOT fix it -- hovering away leaves the stale selection standing -- so the cursor has to land on the card we actually want. Classic is index 1 of 5 (Tutorial/Classic/Roleplay/Wander/Daily) on the 120px pitch centred at x=960, hence 840."
+        },
+        {
           "key": "enter",
           "window": "Raves of Qud",
-          "note": "confirm the default card (Classic)"
+          "note": "confirm the now-hovered Classic card"
         }
       ],
       "verify": {
