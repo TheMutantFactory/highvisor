@@ -837,3 +837,38 @@ arithmetic said.
 second run reproduced B1 exactly. So that was a capture-time artefact, not code — but it means a
 SINGLE capture can mislead by ~1.4 on that leaf family, and the uniform-across-a-family signature
 is the tell that it is not geometry. Score twice before believing a small move.
+
+### Stage G — results
+
+| gate | baseline | result |
+|---|---|---|
+| **G1** raves Wander whole-tree tour | B5 (21/21) | **22/22 arrived, 0 EDGE, 0 ENV, 0 REFUSED**, 19.4 min. 22 not 21 because the chargen work added `caste`. All eight status edges arrived, so the seam holds on the Mac side. |
+| **G2** `hv loadsave` (Stage B rewrote it) | B6 | PASS — `ok, via bridge loadsave`. The Mod-Configuration popup path did NOT fire here (this Mac's save matches the mod config); it is covered by the fake-bridge selftest and still wants an end-to-end run on Lumpy. Popup mirror+answer was exercised during F2: Qud raised the 8-option item menu, Raves mirrored it (`popup=menu`, `popup_n=2`), Cancel answered it. |
+| **G3** typing guard on the NEW field | B3 / FULL 1 | PASS — typed `e j q x n 1 2` into the Map Editor blueprint filter and **read `ejqxn12` back out of the pixels**. The scene never left `map_editor`, so both directions hold: the characters arrived AND no status hotkey fired. |
+
+Three nodes in G1 arrived while `hv goto` reported failure (`status_quests`, `caste`,
+`blueprint_browser`). Not a tour defect — arrival is decided by the tree's detectors, which is
+exactly why the script does not trust goto's verdict — but it means those edges' `verify` blocks
+disagree with the detector that finally resolves them. Worth a look; not a merge blocker.
+
+### Two more things the run exposed
+
+1. **`hv layout pair` did not exist**, though `parity.py`'s size-mismatch message tells you to run
+   it. Created from the verified capture geometry (Raves 0,-2160 / Qud 0,-1080, both 1920x1080,
+   no overlap) and trimmed to the two apps — `layout-save` grabs every window on screen, which
+   for a "pair" layout would shuffle the whole desktop. Applying it now reports 2/2.
+2. **The PC's layout restoration re-applies whatever layout was last used, on every restart.**
+   `hv loadsave` restarts Qud, which re-applied the `loop` desktop arrangement and put both
+   windows back to 1793x997 / 1842x991 mid-session. Good feature, real hazard: **a capture taken
+   after any restart can be silently off-geometry.** With `pair` now saved, the fix is to apply
+   it after a restart rather than to trust the remembered one.
+
+### Still open
+
+- **Stage H** items remain: the `os` seam is built, but `plat_mac.py` still lacks
+  `qud_install_dir()`, and `_settle_rendering`/`loadsave` still read the state file without a pid.
+- `darwin.py` implements no `drag()` at all — `hv drag` is Windows-only regardless of button.
+- Ask Lumpy: do the letter-key status edges work now the VK/scancode fix has landed (if so the
+  seam's `nt` half can go), and how does `apps.*.state_file` resolve on Windows.
+- The Classic tours (qud 28/28, raves 20/21) were NOT re-run — B5 is explicit that they are a
+  pre-release exercise, ~36 min of wall time, and G1 did not regress.
