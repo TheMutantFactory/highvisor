@@ -114,7 +114,8 @@
                       "scene": [
                         "chargen_game_mode",
                         "chargen_genotype",
-                        "chargen_subtype"
+                        "chargen_caste",
+                        "chargen_calling"
                       ]
                     },
                     {
@@ -195,7 +196,7 @@
                     "detect": {
                       "raves": [
                         {
-                          "scene": "chargen_subtype"
+                          "scene": "chargen_calling"
                         }
                       ],
                       "qud": [
@@ -221,11 +222,11 @@
                       ],
                       "raves": [
                         {
-                          "scene": "chargen_subtype"
+                          "scene": "chargen_caste"
                         }
                       ]
                     },
-                    "note": "The TRUE KIN branch, and the one the 1:1 work is aimed at. Qud draws it as a horizontal card carousel of twelve castes under three coloured, dash-ruled city headers (Ekuemekiyye / Ibul / Yawningmoon), letter-keyed [A]-[L], with the chosen caste's bullets below -- the SAME carousel chrome as every other chargen screen, just with a category row inserted, which pushes the title block up from y482 to y432. Raves currently answers with a bespoke left-list + right-detail panel (SubtypeScreen.gd), so the detect is shared with `calling`: Raves reports one scene, `chargen_subtype`, for both branches and cannot tell them apart. Splitting that scene is part of the 1:1 work, not a detector fix."
+                    "note": "The TRUE KIN branch, and the one the 1:1 work is aimed at. Qud draws it as a horizontal card carousel of twelve castes under three coloured, dash-ruled city headers (Ekuemekiyye / Ibul / Yawningmoon), letter-keyed [A]-[L], with the chosen caste's bullets below -- the SAME carousel chrome as every other chargen screen, just with a category row inserted, which pulls the title block up from y482 to y432. Raves answered this stage with a bespoke left-list + right-detail panel (SubtypeScreen.gd) until 2026-08-08, when CasteScreen.gd replaced it with the shared card template; the same change split Raves' single `chargen_subtype` scene into `chargen_caste`/`chargen_calling`, so this detect and the calling one now name different screens instead of aliasing."
                   },
                   {
                     "id": "attributes",
@@ -2401,7 +2402,7 @@
         }
       ],
       "verify": {
-        "scene": "chargen_subtype"
+        "scene": "chargen_calling"
       },
       "timeout": 10
     },
@@ -2426,10 +2427,10 @@
         }
       ],
       "verify": {
-        "scene": "chargen_subtype"
+        "scene": "chargen_caste"
       },
       "timeout": 12,
-      "note": "The True Kin branch, added 2026-08-08 so the Choose Caste screen is drivable on BOTH sides and its 1:1 numbers can be measured rather than inherited. CAVEAT ON THE VERIFY: Raves reports one scene, `chargen_subtype`, for caste and calling alike, so this verify cannot actually distinguish the branch it just took -- it would pass if the click missed and something confirmed Mutated Human instead. Qud tells them apart first-party (QudSubtypeModuleCategoryWindow vs QudSubtypeModuleWindow); Raves needs the same split before this edge can be trusted unattended, and that split belongs with the 1:1 rebuild of the screen rather than here."
+      "note": "The True Kin branch, added 2026-08-08 so the Choose Caste screen is drivable on BOTH sides and its 1:1 numbers can be measured rather than inherited. The verify NAMES THE BRANCH, which it could not do when added: Raves reported one scene for caste and calling alike, so the edge passed even if the click had missed and confirmed Mutated Human instead. Splitting the scene (MainMenu._on_genotype_chosen) closed that, and it is what makes this edge trustworthy unattended."
     },
     {
       "app": "raves",
