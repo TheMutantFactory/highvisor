@@ -340,6 +340,36 @@ class WindowsBackend(PlatformBackend):
             return ActionResult.fail("launch failed: %s" % e)
         return ActionResult(ok=True, detail="launch %s" % " ".join([spec] + args))
 
+    def mouse_move(self, target: str, x: int, y: int) -> ActionResult:
+        """Pure hover: warp + a REAL injected move, no buttons.
+
+        The darwin backend has had this since OP_MOUSE was defined; Windows never
+        implemented it, so `hv mouse` died with an AttributeError and every step that
+        wanted a hover had to fake one with a click. That is not a cosmetic gap --
+        Qud's chargen carousel SELECTS the card under the cursor and CONFIRMS on a
+        click anywhere else, so hovering and clicking are two different verbs there
+        and a driver that only has the second cannot choose a card deterministically.
+
+        Same MOUSEEVENTF_ABSOLUTE move as click() and for the same reason: SetCursorPos
+        alone raises no WM_INPUT, and Unity's Input System syncs its pointer only from
+        raw moves, so a warped cursor leaves Input.mousePosition stale. Deliberately
+        does NOT activate the window -- a hover that steals focus would change the
+        state it exists to observe.
+        """
+        hwnd = self._resolve(target)
+        if hwnd is None:
+            return ActionResult.fail("mouse needs a window target")
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        gx, gy = rect.left + int(x), rect.top + int(y)
+        sw, sh = self.screen_size()
+        user32.SetCursorPos(gx, gy)
+        user32.mouse_event(0x0001 | 0x8000,
+                           int(gx * 65535 / max(sw - 1, 1)),
+                           int(gy * 65535 / max(sh - 1, 1)), 0, 0)
+        time.sleep(0.12)
+        return ActionResult(ok=True, tier=4, detail="moved @ (%d,%d)" % (gx, gy))
+
     def click(self, target: str, x: int, y: int, button: str = "left",
               double: bool = False, hover: bool = False,
               modifiers: Optional[str] = None) -> ActionResult:

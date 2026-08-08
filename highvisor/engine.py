@@ -1794,6 +1794,9 @@ class Engine:
           {"restart": app}                kill all instances, relaunch, wait for the report
           {"wait_window": label, "timeout": s}       poll for the window
           {"activate": label}             front the window
+          {"hover": [x,y], "window": label}          move the cursor ONLY, no buttons —
+                                                     for UIs where hovering selects and
+                                                     clicking confirms (Qud's chargen)
           {"click_hover": [x,y], "window": label}    hover-click (menus need the hover)
           {"click": [x,y], "window": label}          plain click
           {"click_text": "label", "window": label}   OCR-locate the text, hover-click its
@@ -2021,6 +2024,22 @@ class Engine:
                 r = b.activate(win.id)
                 time.sleep(0.6)
                 return _step_ok(r.ok, None, r.error or "activate failed")
+
+            if "hover" in step:
+                # A hover is NOT a weak click. Qud's chargen carousel selects the card
+                # under the cursor and confirms the current selection on a click that
+                # lands anywhere else, so "put the cursor on card B" and "press it" are
+                # separate verbs; an edge with only clicks cannot say the first, and
+                # ends up confirming whatever happened to be selected.
+                win = self._find_win(b.list_targets(), step.get("window", ""))
+                if win is None:
+                    return {"ok": False, "error": "no window %r" % step.get("window")}
+                x, y = step["hover"]
+                r = b.mouse_move(win.id, int(x), int(y))
+                if not r.ok:
+                    return {"ok": False, "error": r.error or "hover failed"}
+                time.sleep(0.35)
+                return {"ok": True}
 
             if "click_hover" in step or "click" in step:
                 key = "click_hover" if "click_hover" in step else "click"

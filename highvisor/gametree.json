@@ -150,6 +150,22 @@
                     "note": "Qud side had NO detector until the whole-tree FULL sweep 2026-08-07 exposed it: the chooser was open and `hv state` still said Title Screen (scene=QudGamemodeModuleWindow, via=live — an unmapped name falling back to title's game_live signal). Every consequence looked like a navigation bug: `goto new_game` reported landing on the title, and `goto game_mode` then tried to click 'New Game' on a screen already showing the chooser. The mod reports the window first-party, so take that rather than adding OCR substrings — Qud's title OCRs as 'New Kame' and 'Optlons' at this size anyway."
                   },
                   {
+                    "id": "chartype",
+                    "label": "Select Character Option",
+                    "done": {
+                      "qud": 0.7,
+                      "raves": 0.0
+                    },
+                    "detect": {
+                      "qud": [
+                        {
+                          "scene": "QudChartypeModuleWindow"
+                        }
+                      ]
+                    },
+                    "note": "`:choose character type:` -- Presets [A] / New [B] / Random [C] / Library [D] / Last [E]. A WHOLE SCREEN the tree did not know existed: the old model went game_mode -> genotype directly, because nobody had walked Qud's chargen with a working detector. It is the screen the ':choose preset:' capture at the top of this session had come down from. Raves has no equivalent at all -- its flow jumps game_mode -> genotype -- so done=0."
+                  },
+                  {
                     "id": "genotype",
                     "label": "Choose Genotype",
                     "done": {
@@ -161,12 +177,17 @@
                         {
                           "scene": "chargen_genotype"
                         }
+                      ],
+                      "qud": [
+                        {
+                          "scene": "QudGenotypeModuleWindow"
+                        }
                       ]
                     }
                   },
                   {
                     "id": "calling",
-                    "label": "Calling / Subtype",
+                    "label": "Choose Calling (Mutated Human)",
                     "done": {
                       "qud": 0.5,
                       "raves": 0.2
@@ -176,8 +197,35 @@
                         {
                           "scene": "chargen_subtype"
                         }
+                      ],
+                      "qud": [
+                        {
+                          "scene": "QudSubtypeModuleWindow"
+                        }
                       ]
-                    }
+                    },
+                    "note": "The MUTANT branch of the subtype stage. Qud calls caste and calling both `Subtype` internally but gives them DIFFERENT windows -- this flat one, and the grouped `QudSubtypeModuleCategoryWindow` for castes -- so the two are distinguishable first-party and need no OCR. Raves reaches this node by confirming the DEFAULT genotype (Mutated Human), which is why the pre-existing raves genotype->calling edge is a bare Enter."
+                  },
+                  {
+                    "id": "caste",
+                    "label": "Choose Caste (True Kin)",
+                    "done": {
+                      "qud": 0.5,
+                      "raves": 0.2
+                    },
+                    "detect": {
+                      "qud": [
+                        {
+                          "scene": "QudSubtypeModuleCategoryWindow"
+                        }
+                      ],
+                      "raves": [
+                        {
+                          "scene": "chargen_subtype"
+                        }
+                      ]
+                    },
+                    "note": "The TRUE KIN branch, and the one the 1:1 work is aimed at. Qud draws it as a horizontal card carousel of twelve castes under three coloured, dash-ruled city headers (Ekuemekiyye / Ibul / Yawningmoon), letter-keyed [A]-[L], with the chosen caste's bullets below -- the SAME carousel chrome as every other chargen screen, just with a category row inserted, which pushes the title block up from y482 to y432. Raves currently answers with a bespoke left-list + right-detail panel (SubtypeScreen.gd), so the detect is shared with `calling`: Raves reports one scene, `chargen_subtype`, for both branches and cannot tell them apart. Splitting that scene is part of the 1:1 work, not a detector fix."
                   },
                   {
                     "id": "attributes",
@@ -1817,17 +1865,41 @@
           "activate": "CavesOfQud"
         },
         {
-          "click_text": "New Game",
-          "window": "CavesOfQud"
+          "click_hover": [
+            960,
+            250
+          ],
+          "window": "CavesOfQud",
+          "note": "FOCUS PRIME. Windows swallows the first click into an unfocused window to raise it, so the click that matters must never be the first one. y=250 is empty on the TITLE, which is the only screen this edge starts from -- do not copy it onto a chargen edge, where a click on empty space is not inert but CONFIRMS the current selection."
+        },
+        {
+          "click_hover": [
+            960,
+            534
+          ],
+          "window": "CavesOfQud",
+          "note": "select New Game"
+        },
+        {
+          "sleep": 0.6
+        },
+        {
+          "click_hover": [
+            960,
+            534
+          ],
+          "window": "CavesOfQud",
+          "note": "activate it"
         },
         {
           "sleep": 1.0
         }
       ],
       "verify": {
-        "ocr_contains": "game mode"
+        "node": "new_game"
       },
-      "timeout": 15
+      "timeout": 15,
+      "note": "Windows-viable coordinates: click_text needs OCR and ocr() exists only in the darwin backend, so every Qud chargen route died here with `ocr failed:`. The verify was `ocr_contains: 'game mode'`, unrunnable for the same reason the step was; `node` uses the first-party window report instead. TWO clicks, not one, and the reason is a trap worth keeping: New Game is only the default selection while NO SAVE EXISTS. Once chargen has been run once, Qud's title defaults to Continue instead, and a one-click edge written against a fresh install then lands on the wrong row -- measured 2026-08-08, when this edge began failing mid-session for no reason other than that the earlier runs had created a save. The first click selects, the second activates; that holds under both defaults."
     },
     {
       "app": "qud",
@@ -2281,8 +2353,12 @@
           "activate": "Raves of Qud"
         },
         {
-          "click_text": "New Game",
-          "window": "Raves of Qud"
+          "click_hover": [
+            958,
+            532
+          ],
+          "window": "Raves of Qud",
+          "note": "Windows-viable: click_text needs OCR, which exists only in the darwin backend, so this edge failed on Lumpy with `ocr failed:` and took the whole chargen subtree with it. MEASURED at 1920x1080 -- New Game is the first row of the title menu box. Two pixels off Qud's own (960,534) because the two menus are separately laid out; close enough that the gap is worth a parity leaf, not a coordinate fudge."
         },
         {
           "dismiss": {
@@ -2321,13 +2397,39 @@
         {
           "key": "enter",
           "window": "Raves of Qud",
-          "note": "confirm the default genotype"
+          "note": "confirm the default genotype (Mutated Human [A]) -- which is WHY this edge lands on calling and not caste"
         }
       ],
       "verify": {
         "scene": "chargen_subtype"
       },
       "timeout": 10
+    },
+    {
+      "app": "raves",
+      "from": "genotype",
+      "to": "caste",
+      "steps": [
+        {
+          "activate": "Raves of Qud"
+        },
+        {
+          "click_hover": [
+            1042,
+            563
+          ],
+          "window": "Raves of Qud",
+          "note": "True Kin [B]. ONE click, not Qud's two: a Raves chargen card's own gui_input runs `_engage(); _select(idx); _confirm()` (ChargenCardScreen.gd), so the click IS the confirmation. MEASURED, and the measurement is itself a parity finding -- Raves' two cards sit on a ~143px pitch at y563 against Qud's 125px at y590, so the coordinates deliberately are NOT shared between the two apps' edges."
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "scene": "chargen_subtype"
+      },
+      "timeout": 12,
+      "note": "The True Kin branch, added 2026-08-08 so the Choose Caste screen is drivable on BOTH sides and its 1:1 numbers can be measured rather than inherited. CAVEAT ON THE VERIFY: Raves reports one scene, `chargen_subtype`, for caste and calling alike, so this verify cannot actually distinguish the branch it just took -- it would pass if the click missed and something confirmed Mutated Human instead. Qud tells them apart first-party (QudSubtypeModuleCategoryWindow vs QudSubtypeModuleWindow); Raves needs the same split before this edge can be trusted unattended, and that split belongs with the 1:1 rebuild of the screen rather than here."
     },
     {
       "app": "raves",
@@ -2644,7 +2746,18 @@
           "activate": "CavesOfQud"
         },
         {
-          "click_text": "New Game",
+          "click_hover": [
+            960,
+            250
+          ],
+          "window": "CavesOfQud",
+          "note": "focus prime -- see qud title->new_game"
+        },
+        {
+          "click_hover": [
+            960,
+            534
+          ],
           "window": "CavesOfQud"
         },
         {
@@ -2655,7 +2768,214 @@
         "node": "game_mode"
       },
       "timeout": 15,
-      "note": "Qud shows game mode and the rest of character creation as ONE screen, so this is the same move as title->new_game. Spelled out rather than aliased: an edge whose steps you have to look somewhere else to read is how recipes drifted."
+      "note": "Qud shows game mode and the rest of character creation as ONE screen, so this is the same move as title->new_game. Spelled out rather than aliased: an edge whose steps you have to look somewhere else to read is how recipes drifted. Coordinates rather than click_text for the OCR reason recorded on that edge."
+    },
+    {
+      "app": "qud",
+      "from": "game_mode",
+      "to": "chartype",
+      "steps": [
+        {
+          "click_hover": [
+            835,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "SELECT Classic [B]"
+        },
+        {
+          "sleep": 0.6
+        },
+        {
+          "click_hover": [
+            835,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "ACTIVATE it"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "chartype"
+      },
+      "timeout": 15,
+      "status": "UNVERIFIED -- see note",
+      "note": "CARD GEOMETRY is solid, measured at 1920x1080: card centres lie on a 125px pitch centred at x=960, y=590, so an N-card row puts card i at 960+(i-(N-1)/2)*125. Classic is index 1 of 5 -> 835. KEYS ARE NOT AN OPTION on Lumpy: neither SendKeys nor SendInput reaches Qud on these screens even while it is frontmost and answering clicks -- the letter hotkeys [A]-[E] printed on the cards look like the obvious drive and simply do nothing, verified 2026-08-08. WHAT IS NOT PINNED DOWN is the click semantics, and this edge should not be trusted until it is. Three behaviours were each observed more than once and no single model predicts all of them: a click on an unselected card sometimes only selects it and sometimes selects AND activates; a click on EMPTY SPACE confirms the current selection and advances; and a cursor left resting where the previous screen's card was appears to pre-select whatever card lands under it when the next screen draws, which makes an edge's behaviour depend on where the PREVIOUS edge left the mouse. A two-click walk of title->caste consequently overshot to chartype. The `hover` step added alongside this (engine.py) is the intended instrument for separating select from confirm; it has not yet been used to re-derive these edges."
+    },
+    {
+      "app": "qud",
+      "from": "chartype",
+      "to": "genotype",
+      "steps": [
+        {
+          "click_hover": [
+            835,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "SELECT New [B] -- 'build a character from scratch', as against Presets/Random/Library/Last"
+        },
+        {
+          "sleep": 0.6
+        },
+        {
+          "click_hover": [
+            835,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "ACTIVATE it"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "genotype"
+      },
+      "timeout": 15,
+      "note": "Same coordinate as game_mode->chartype by coincidence, not by aliasing: both want card index 1 of a 5-card row. See that edge for the card rule and the pitch."
+    },
+    {
+      "app": "qud",
+      "from": "genotype",
+      "to": "caste",
+      "steps": [
+        {
+          "click_hover": [
+            1022,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "SELECT True Kin [B] -- index 1 of a 2-card row, so 960+0.5*125"
+        },
+        {
+          "sleep": 0.6
+        },
+        {
+          "click_hover": [
+            1022,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "ACTIVATE it"
+        },
+        {
+          "sleep": 1.0
+        }
+      ],
+      "verify": {
+        "node": "caste"
+      },
+      "timeout": 15,
+      "note": "THE TRUE KIN BRANCH. A stray third click at this coordinate is harmless: the caste screen inserts a category-header row that lifts its cards to y563, so y590 lands in dead space between tile and label rather than on Praetorian [G], which is what x=1022 would otherwise hit."
+    },
+    {
+      "app": "qud",
+      "from": "genotype",
+      "to": "calling",
+      "steps": [
+        {
+          "click_hover": [
+            897,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "SELECT Mutated Human [A] -- index 0 of 2, so 960-0.5*125"
+        },
+        {
+          "sleep": 0.6
+        },
+        {
+          "click_hover": [
+            897,
+            590
+          ],
+          "window": "CavesOfQud",
+          "note": "ACTIVATE it"
+        },
+        {
+          "sleep": 1.0
+        }
+      ],
+      "verify": {
+        "node": "calling"
+      },
+      "timeout": 15,
+      "note": "The MUTANT branch. Mutated Human is card [A] and therefore already selected on arrival, so the first click activates and the second lands on the Calling screen -- the one place the two-click rule is not free. It is still safe: the calling list is a vertical list, not a carousel, and x=897/y=590 is inside its left column, so the worst case is that a calling gets highlighted, which the next edge would overwrite anyway."
+    },
+    {
+      "app": "qud",
+      "from": [
+        "caste",
+        "calling"
+      ],
+      "to": "genotype",
+      "steps": [
+        {
+          "click_hover": [
+            78,
+            576
+          ],
+          "window": "CavesOfQud",
+          "note": "[Esc] Back, CLICKED rather than pressed -- keys do not reach Qud on Lumpy (see game_mode->chartype). The affordance sits at the same place on every chargen screen."
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "genotype"
+      },
+      "timeout": 15,
+      "note": "The back edges are deliberately ONE STEP each rather than one edge that clicks Back three times: Back does not stop at the top of chargen, it carries on to the title, so a fixed-length climb overshoots from any start but the deepest. Single steps let the planner compose exactly the climb a route needs -- and this one is what makes the sideways move caste <-> calling possible without a restart."
+    },
+    {
+      "app": "qud",
+      "from": "genotype",
+      "to": "chartype",
+      "steps": [
+        {
+          "click_hover": [
+            78,
+            576
+          ],
+          "window": "CavesOfQud",
+          "note": "[Esc] Back"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "chartype"
+      },
+      "timeout": 15
+    },
+    {
+      "app": "qud",
+      "from": "chartype",
+      "to": "game_mode",
+      "steps": [
+        {
+          "click_hover": [
+            78,
+            576
+          ],
+          "window": "CavesOfQud",
+          "note": "[Esc] Back"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "game_mode"
+      },
+      "timeout": 15
     },
     {
       "app": "raves",
@@ -2666,8 +2986,12 @@
           "activate": "Raves of Qud"
         },
         {
-          "click_text": "New Game",
-          "window": "Raves of Qud"
+          "click_hover": [
+            958,
+            532
+          ],
+          "window": "Raves of Qud",
+          "note": "coordinates rather than OCR -- see raves title->game_mode"
         },
         {
           "dismiss": {
