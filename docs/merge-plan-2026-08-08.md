@@ -734,3 +734,74 @@ merge):**
 **Verifiable here in principle, but not yet possible:** the Map Editor per-object context menu — it
 is hung off the middle button, and the Mac backend cannot produce one (§3.1). It becomes Mac-testable
 after Stage H item 2, and not before. Do not record it as failing in the meantime; it is untested.
+
+---
+
+# EXECUTION LOG — 2026-08-08, this machine
+
+Re-surveyed at execution time as §0 requires, and the survey had moved: **16 changed edges,
+not 11**, plus a chargen subtree (2 nodes, 9 edges, 3 detectors) that did not exist when the
+plan was written. Both repos still merged with zero textual conflicts.
+
+## Done and gated
+
+| stage | result |
+|---|---|
+| 0 re-survey | clean merge both repos; author guard clean; edge set re-diffed from scratch |
+| A branches | `dd/mac-pc-merge-0808` off `main` in both repos |
+| B highvisor | merged + resolved (below). **Gate B vs B4: selftests 4/4** |
+| C raves | merged. **Gate C vs B3: typing audit 14→15 (the predicted field), Godot check-only clean vs main, dotnet 0 errors / 18 CS0618** |
+| D SPOT | **5/5** — state_graph_render and `--quit-after 120` both clean, apps down |
+| E deploy | mod deployed (0 MODERROR, bridge 48710 up), Raves rebuilt, `title_bg.json` deleted, daemon confirmed by behaviour (`[live ui_age=…]` on BOTH apps — the Raves half only works because the rebuild landed first) |
+
+**Resolutions taken, differing from the plan where the plan was wrong:**
+
+1. **A per-OS seam was built now, not deferred to Stage H.** The plan budgeted 3 edges for it;
+   the re-survey found 7, spanning both apps, including `qud title -> new_game` (coordinates on
+   the edge that starts games — precisely what the click-by-label rule exists to prevent). Steps
+   now take `{"os": "posix"|"nt"}`. `selftest_plan` enforces that every seamed edge keeps an
+   ACTUATING step under every os; all three ways to break that were made to fail before the fix
+   was accepted.
+2. **The 7 letter-key status edges were NOT reverted — they were seamed too.** Reverting would
+   have deleted Lumpy's only working path. Mac keeps the letter keys (21/21, and the bindings
+   are provably there at `MainFrame.gd:282`), Windows keeps F2+tab-click, and the note asks for
+   a retest now the VK/scancode fix has landed.
+3. **The plan's "keep the PC's `{focus: true}` improvement" was a no-op** — `_run_step`'s key
+   branch already passes `focus=True` unconditionally, so the flag was never read. Dropped.
+4. `loadsave`'s popup answer re-expressed by CONTENT + option LABEL, with a fake-bridge test
+   (11 cases) covering the reordered-options case the old index-1 code got exactly wrong.
+5. `hv click --middle` implemented in `darwin.py` rather than documented as broken.
+
+## THE BLOCKER — Stages F and G are NOT done, and the cause is not the merge
+
+`hv activate` **silently did nothing.** `NSRunningApplication.activateWithOptions_` returns YES
+and no longer moves focus on macOS 26 (Darwin 25.5) unless the caller is itself frontmost —
+cooperative activation. Three `hv activate CavesOfQud` in a row each reported `ok` while the
+frontmost app never changed. Every click-driven Qud edge was posting into an unfocused window;
+Unity still delivers mouseMoved, so the *hover tooltip appeared on the right icon* while the
+button did nothing, which reads exactly like a coordinate bug and is not one.
+
+Fixed: activate prefers `activateFromApplication_options_` and then **polls who is actually
+frontmost**, failing the step if focus did not land. The API's return value is not evidence —
+that was the entire defect. Verified: `activated (frontmost pid=…)`, and focus really moves.
+
+That exposed the next layer, which is still open:
+
+> **Raves takes focus back during the click.** Sequence measured: activate Qud → frontmost is
+> CavesOfQud → `hv click` → frontmost is **Raves of Qud**, and Qud never saw the button. So the
+> Qud toolbar edges still fail with both apps up.
+
+This is the two-window focus wall, not a merge regression. It has to be closed before Stage F
+can produce a number, because every status-screen capture depends on driving Qud by click.
+Next session starts here: find what raises Raves (the `window_rect.json` poll in `Settings.gd`
+re-places on a 0.5s timer and is the first suspect), then run F and G.
+
+**Nothing measured, nothing claimed:** no parity leaf was re-scored. B1/B2 remain unverified
+against the merge. Do not record the Equipment or item-popup scoreboards as holding.
+
+Also unresolved and now known:
+- `hv layout pair` does not exist on this machine (only loop/halves/quads), though `parity.py`'s
+  size-mismatch message tells you to run it. `hv layout loop` is a DESKTOP arrangement and
+  resizes Qud to 1793x997 — do not use it before a capture. `hv launch raves` is the pair start:
+  it spawns Qud **borderless** at 1920x1080, which is what the baselines were taken at.
+- `darwin.py` implements no `drag()` at all, so `hv drag` is Windows-only regardless of button.

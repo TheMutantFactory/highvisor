@@ -701,10 +701,39 @@ class MacBackend(PlatformBackend):
         app = self._running(int(w["kCGWindowOwnerPID"]))
         if app is None:
             return ActionResult.fail("no running application for target")
-        # NSApplicationActivateAllWindows(1) | IgnoringOtherApps(2). The latter is
-        # deprecated on macOS 14 but still the reliable "bring me forward" nudge.
-        ok = bool(app.activateWithOptions_(1 | 2))
-        return ActionResult(ok=ok, tier=4, detail="NSRunningApplication.activate")
+        # COOPERATIVE ACTIVATION (macOS 14+, and by 26 it is the only thing that works).
+        # `activateWithOptions_` returns YES and does NOTHING when the caller is not itself
+        # frontmost -- the system now requires the activation to be handed over BY a running
+        # app rather than seized. Measured 2026-08-08 on Darwin 25.5: three `hv activate
+        # CavesOfQud` in a row each reported ok while the frontmost app stayed put, so every
+        # click-driven edge posted its click into an unfocused window. Unity still delivers
+        # mouseMoved (the tooltip appeared, which is what made this look like a coordinate
+        # problem for half an hour) but ignores the button, so the edges failed with the
+        # pointer provably on target.
+        me = NSRunningApplication.currentApplication()
+        moved = False
+        if hasattr(app, "activateFromApplication_options_"):
+            # 1|2 == ActivateAllWindows | ActivateIgnoringOtherApps
+            moved = bool(app.activateFromApplication_options_(me, 1 | 2))
+        if not moved:
+            moved = bool(app.activateWithOptions_(1 | 2))   # pre-14 fallback
+        # AND THEN CHECK. The API's return value is not evidence -- that is the whole bug
+        # above. Poll who is actually frontmost and report THAT, so a failed activation
+        # fails the step instead of handing the next click an unfocused window.
+        want = int(w["kCGWindowOwnerPID"])
+        deadline = time.time() + 1.5
+        while time.time() < deadline:
+            front = NSWorkspace.sharedWorkspace().frontmostApplication()
+            if front is not None and int(front.processIdentifier()) == want:
+                return ActionResult(ok=True, tier=4,
+                                    detail="activated (frontmost pid=%d)" % want)
+            time.sleep(0.05)
+        front = NSWorkspace.sharedWorkspace().frontmostApplication()
+        return ActionResult.fail(
+            "activate did not take: asked for pid %d, frontmost is %s. macOS will refuse "
+            "cross-app activation in some states; nothing that needs focus (clicks, keys) "
+            "will work until it lands."
+            % (want, (front.localizedName() if front else "?")))
 
     def move(self, target: str, x: int, y: int, w: int, h: int,
              topmost: Optional[bool] = None) -> ActionResult:
