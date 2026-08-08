@@ -842,7 +842,7 @@ is the tell that it is not geometry. Score twice before believing a small move.
 
 | gate | baseline | result |
 |---|---|---|
-| **G1** raves Wander whole-tree tour | B5 (21/21) | **22/22 arrived, 0 EDGE, 0 ENV, 0 REFUSED**, 19.4 min. 22 not 21 because the chargen work added `caste`. All eight status edges arrived, so the seam holds on the Mac side. |
+| **G1** raves Wander whole-tree tour | B5 (21/21) | **22/22 arrived, 0 EDGE, 0 ENV, 0 REFUSED**, 18.2 min. 22 not 21 because the chargen work added `caste`. All eight status edges arrived, so the seam holds on the Mac side. **RE-RUN — the first run's number was not evidence, see below.** |
 | **G2** `hv loadsave` (Stage B rewrote it) | B6 | PASS — `ok, via bridge loadsave`. The Mod-Configuration popup path did NOT fire here (this Mac's save matches the mod config); it is covered by the fake-bridge selftest and still wants an end-to-end run on Lumpy. Popup mirror+answer was exercised during F2: Qud raised the 8-option item menu, Raves mirrored it (`popup=menu`, `popup_n=2`), Cancel answered it. |
 | **G3** typing guard on the NEW field | B3 / FULL 1 | PASS — typed `e j q x n 1 2` into the Map Editor blueprint filter and **read `ejqxn12` back out of the pixels**. The scene never left `map_editor`, so both directions hold: the characters arrived AND no status hotkey fired. |
 
@@ -872,3 +872,33 @@ disagree with the detector that finally resolves them. Worth a look; not a merge
   seam's `nt` half can go), and how does `apps.*.state_file` resolve on Windows.
 - The Classic tours (qud 28/28, raves 20/21) were NOT re-run — B5 is explicit that they are a
   pre-release exercise, ~36 min of wall time, and G1 did not regress.
+
+### Correction: G1's first run could not have failed
+
+`hv assert` returns BOTH `ok` (the envelope: the op ran) and `passed` (the verdict).
+`tour.py` read `ok`, so **every node counted as arrived no matter what the assertion said** —
+a 22/22 that was guaranteed before the tour started. Reported to Daniel as a result before it
+was caught. Ninth instance of this family in this codebase, and this one was mine.
+
+Fixed: the tour reads `passed`, and now **exits** rather than guessing if the field is ever
+absent. Re-run from scratch: **22/22, 0 EDGE / 0 ENV / 0 REFUSED, 18.2 min** — the number was
+right, but only the second run is evidence for it. Two differences worth noting: no node
+printed `(goto said no)` this time (the three that did on the first run all drove cleanly), and
+`status_quests` went 39.2s -> 14.2s.
+
+**What the broken check had been hiding: `map_editor` had no `raves` detector at all.** Its
+`detect` block carried only a `qud` entry, so Raves — which publishes `scene=map_editor` — read
+as `running · unknown screen  via=window`, and any assert on that node timed out. Added, and it
+now resolves `Map Editor  scene=map_editor  via=scene`.
+
+### Stage H progress (Mac-side items; the rest need Lumpy)
+
+- **`qud_install_dir()` added to `plat_mac.py`** and `fonts.py`'s `getattr(plat, ...)` fallback
+  dropped — both backends define the name now. Verified end-to-end: the extractor carved 4
+  faces out of this Mac's own install through the unified call.
+- **`_settle_rendering` reads the pid's own sidecar.** It was calling `_read_state_file(p)`
+  with no pid, bypassing the per-process files that exist precisely because the shared one is a
+  coin flip under duplicate instances. `hv shot --live` still reports a real `ui_age` on both
+  apps after the change.
+- Still open: `loadsave`'s own pid-less read, `qud_install_dir()` on the Windows Steam path if
+  Lumpy's install differs, and everything gated on Lumpy's answers.

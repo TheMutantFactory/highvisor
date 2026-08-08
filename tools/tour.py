@@ -102,7 +102,14 @@ def main():
         # ARRIVAL IS DECIDED BY THE TREE, not by goto's own verdict.
         chk = hv("assert", "--app", a.app, "--node", node)
         took = time.time() - t
-        if chk.get("ok"):
+        # `ok` is the ENVELOPE (the op ran); `passed` is the VERDICT. Reading `ok` here made
+        # every node "arrive" no matter what the assertion said -- a 22/22 that could not have
+        # produced any other number. Ninth instance of that family in this codebase, so: demand
+        # the field, and fail loudly rather than fall back if it is ever missing.
+        if "passed" not in chk:
+            sys.exit("hv assert returned no `passed` field for %s -- refusing to guess a "
+                     "verdict from the envelope. Got: %s" % (node, chk))
+        if chk["passed"]:
             res["arrived"].append(node)
             print("%2d/%d %-22s ok   %5.1fs%s" % (i, len(nodes), node, took,
                                                   "  (goto said no)" if not g.get("ok") else ""))

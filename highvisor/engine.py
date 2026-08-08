@@ -1336,11 +1336,23 @@ class Engine:
             return {"live_checked": False, "live_reason": "app authors no state file"}
         p = _os.path.expanduser(path)
 
+        # READ THE PID'S OWN SIDECAR. The shared state file has one writer per running
+        # instance, so with duplicates a bare read is a coin flip -- which is the exact
+        # failure the per-process sidecars were added for, and this call was bypassing them.
+        # Only the ui_age is wrong when that happens, not the screen, but a wrong ui_age is
+        # what decides whether a capture is labelled live, so it is worth the lookup.
+        pid = None
+        try:
+            w = self._find_win(b.list_targets(), target)
+            pid = getattr(w, "pid", None) if w is not None else None
+        except Exception:
+            pid = None
+
         deadline = _t.time() + timeout
         last = None
         tries = 0
         while _t.time() < deadline:
-            d = self._read_state_file(p)
+            d = self._read_state_file(p, pid)
             age = (d or {}).get("ui_age")
             if age is None:
                 return {"live_checked": False, "live_reason": "state file has no ui_age"}
