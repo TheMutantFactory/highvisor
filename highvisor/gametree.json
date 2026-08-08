@@ -2744,22 +2744,10 @@
       "to": "game_mode",
       "steps": [
         {
-          "activate": "CavesOfQud"
-        },
-        {
-          "click_hover": [
-            960,
-            250
-          ],
-          "window": "CavesOfQud",
-          "note": "focus prime -- see qud title->new_game"
-        },
-        {
-          "click_hover": [
-            960,
-            534
-          ],
-          "window": "CavesOfQud"
+          "bridge": "pick",
+          "args": {
+            "label": "New Game"
+          }
         },
         {
           "sleep": 1.0
@@ -2769,7 +2757,7 @@
         "node": "game_mode"
       },
       "timeout": 15,
-      "note": "Qud shows game mode and the rest of character creation as ONE screen, so this is the same move as title->new_game. Spelled out rather than aliased: an edge whose steps you have to look somewhere else to read is how recipes drifted. Coordinates rather than click_text for the OCR reason recorded on that edge."
+      "note": "Qud shows game mode and the rest of character creation as ONE screen, so this is the same move as title->new_game. Spelled out rather than aliased: an edge whose steps you have to look somewhere else to read is how recipes drifted. FIRST-PARTY: the title menu's rows dispatch on Qud's own \"Pick:<label>\" event, so the mod pushes it directly -- no coordinates, no OCR, and no focus dependency. It replaced a focus-priming click plus a two-click select-then-activate dance whose correctness depended on WHETHER A SAVE EXISTED (New Game is only the default row on a fresh install; once chargen has run once the title defaults to Continue and a fixed-coordinate recipe lands on the wrong row)."
     },
     {
       "app": "qud",
@@ -2777,23 +2765,10 @@
       "to": "chartype",
       "steps": [
         {
-          "click_hover": [
-            835,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "SELECT Classic [B]"
-        },
-        {
-          "sleep": 0.6
-        },
-        {
-          "click_hover": [
-            835,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "ACTIVATE it"
+          "bridge": "choose",
+          "args": {
+            "label": "Classic"
+          }
         },
         {
           "sleep": 0.8
@@ -2803,8 +2778,7 @@
         "node": "chartype"
       },
       "timeout": 15,
-      "status": "UNVERIFIED -- see note",
-      "note": "CARD GEOMETRY is solid, measured at 1920x1080: card centres lie on a 125px pitch centred at x=960, y=590, so an N-card row puts card i at 960+(i-(N-1)/2)*125. Classic is index 1 of 5 -> 835. KEYS ARE NOT AN OPTION on Lumpy: neither SendKeys nor SendInput reaches Qud on these screens even while it is frontmost and answering clicks -- the letter hotkeys [A]-[E] printed on the cards look like the obvious drive and simply do nothing, verified 2026-08-08. WHAT IS NOT PINNED DOWN is the click semantics, and this edge should not be trusted until it is. Three behaviours were each observed more than once and no single model predicts all of them: a click on an unselected card sometimes only selects it and sometimes selects AND activates; a click on EMPTY SPACE confirms the current selection and advances; and a cursor left resting where the previous screen's card was appears to pre-select whatever card lands under it when the next screen draws, which makes an edge's behaviour depend on where the PREVIOUS edge left the mouse. A two-click walk of title->caste consequently overshot to chartype. The `hover` step added alongside this (engine.py) is the intended instrument for separating select from confirm; it has not yet been used to re-derive these edges."
+      "note": "FIRST-PARTY, and it ended a long dead end. Qud's chargen screens are modern Qud.UI windows that read NONE of the input queues anything outside the process can reach: SendKeys, raw SendInput scancodes, the printed [A]-[E] card hotkeys, and every tag pushed through Keyboard.PushMouseEvent/PushCommand all moved exactly 0 pixels (measured by frame differencing, 2026-08-08). Clicks DID land -- they are Unity UI raycasts -- but their semantics never resolved into a model that survived a second run: a click on an unselected card sometimes only selected it and sometimes selected AND activated, a click on empty space confirmed the current selection, and a cursor left resting from the PREVIOUS edge appeared to pre-select whatever card drew under it, so an edge's behaviour depended on where the last edge parked the mouse. Reflecting the live window instead (mod: UiReflector) named the way in -- the window's own GetSelections() and its selection handler -- and the mod's `choose` command matches a choice BY LABEL and hands it to that handler. It cannot land on the wrong card, because the choice object IS the identity; there is no geometry left to get wrong. The card-pitch note that used to live here is preserved on genotype->caste, where it is still needed for RAVES-side layout parity."
     },
     {
       "app": "qud",
@@ -2812,23 +2786,10 @@
       "to": "genotype",
       "steps": [
         {
-          "click_hover": [
-            835,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "SELECT New [B] -- 'build a character from scratch', as against Presets/Random/Library/Last"
-        },
-        {
-          "sleep": 0.6
-        },
-        {
-          "click_hover": [
-            835,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "ACTIVATE it"
+          "bridge": "choose",
+          "args": {
+            "label": "New"
+          }
         },
         {
           "sleep": 0.8
@@ -2838,7 +2799,7 @@
         "node": "genotype"
       },
       "timeout": 15,
-      "note": "Same coordinate as game_mode->chartype by coincidence, not by aliasing: both want card index 1 of a 5-card row. See that edge for the card rule and the pitch."
+      "note": "'New' = build a character from scratch, as against Presets/Random/Library/Last. Matching is exact-first, so this cannot be stolen by a longer label that merely contains 'New'. See game_mode->chartype for why these are bridge calls and not clicks."
     },
     {
       "app": "qud",
@@ -2846,23 +2807,10 @@
       "to": "caste",
       "steps": [
         {
-          "click_hover": [
-            1022,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "SELECT True Kin [B] -- index 1 of a 2-card row, so 960+0.5*125"
-        },
-        {
-          "sleep": 0.6
-        },
-        {
-          "click_hover": [
-            1022,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "ACTIVATE it"
+          "bridge": "choose",
+          "args": {
+            "label": "True Kin"
+          }
         },
         {
           "sleep": 1.0
@@ -2872,7 +2820,7 @@
         "node": "caste"
       },
       "timeout": 15,
-      "note": "THE TRUE KIN BRANCH. A stray third click at this coordinate is harmless: the caste screen inserts a category-header row that lifts its cards to y563, so y590 lands in dead space between tile and label rather than on Praetorian [G], which is what x=1022 would otherwise hit."
+      "note": "THE TRUE KIN BRANCH. See game_mode->chartype for why this is a bridge call. QUD'S CARD GEOMETRY, kept here because Raves' carousel is built to match it: card centres lie on a 125px pitch centred at x=960, y=590 at 1920x1080, so an N-card row puts card i at 960+(i-(N-1)/2)*125 -- True Kin is index 1 of 2. The caste screen itself breaks that y: it inserts a category-header row that lifts its cards to y563."
     },
     {
       "app": "qud",
@@ -2880,23 +2828,10 @@
       "to": "calling",
       "steps": [
         {
-          "click_hover": [
-            897,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "SELECT Mutated Human [A] -- index 0 of 2, so 960-0.5*125"
-        },
-        {
-          "sleep": 0.6
-        },
-        {
-          "click_hover": [
-            897,
-            590
-          ],
-          "window": "CavesOfQud",
-          "note": "ACTIVATE it"
+          "bridge": "choose",
+          "args": {
+            "label": "Mutated Human"
+          }
         },
         {
           "sleep": 1.0
@@ -2906,7 +2841,7 @@
         "node": "calling"
       },
       "timeout": 15,
-      "note": "The MUTANT branch. Mutated Human is card [A] and therefore already selected on arrival, so the first click activates and the second lands on the Calling screen -- the one place the two-click rule is not free. It is still safe: the calling list is a vertical list, not a carousel, and x=897/y=590 is inside its left column, so the worst case is that a calling gets highlighted, which the next edge would overwrite anyway."
+      "note": "The MUTANT branch. See game_mode->chartype for why this is a bridge call. The click version of this edge was the worst of the four: Mutated Human is card [A] and so ALREADY selected on arrival, which made the first click activate and the second land on the next screen -- the one place the select-then-activate pair was not free, and it only stayed safe by accident."
     },
     {
       "app": "qud",

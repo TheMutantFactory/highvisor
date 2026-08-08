@@ -242,6 +242,15 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   HID-sourced or not. Exit them with the mod's first-party `uiback` bridge command
   (gametree `{"bridge": "uiback"}` step / `{"dismiss": {..., "bridge": "uiback"}}`),
   never key injection. Clicks DO land (warp + HID button pair).
+- **Qud's CHARGEN screens ignore the mod's own push APIs too, and that is the deeper
+  version of the rule above.** `Keyboard.PushCommand`/`PushMouseEvent` feed the LEGACY
+  console queue; the chargen module windows are modern `Qud.UI` windows that do not read
+  it. Every tag form through either carrier moved exactly **0 pixels** — and zero every
+  time with never a near-miss is the signature of a queue nobody reads, not of a wrong
+  tag. Drive them with `{"bridge": "choose", "args": {"label": "Classic"}}`, which calls
+  the window's own `GetSelections()` + selection handler in the mod (`UiDriver`). It
+  matches by label, so it cannot land on the wrong card the way a coordinate can. The
+  mod's `reflect` command dumps any live window's methods when a new screen needs one.
 - Menu recipes click by LABEL, not coords: `{"click_text": "Records", "window": ...}` —
   fixed coords started stray games twice when the menu reflowed / the window sat
   off-slot. OCR matching is space-insensitive (Vision reads 'Opti ons' on Raves'
