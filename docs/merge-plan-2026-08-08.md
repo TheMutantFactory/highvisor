@@ -772,7 +772,7 @@ plan was written. Both repos still merged with zero textual conflicts.
    (11 cases) covering the reordered-options case the old index-1 code got exactly wrong.
 5. `hv click --middle` implemented in `darwin.py` rather than documented as broken.
 
-## THE BLOCKER — Stages F and G are NOT done, and the cause is not the merge
+## Stage F — PASSED. And the blocker was not what it looked like
 
 `hv activate` **silently did nothing.** `NSRunningApplication.activateWithOptions_` returns YES
 and no longer moves focus on macOS 26 (Darwin 25.5) unless the caller is itself frontmost —
@@ -805,3 +805,35 @@ Also unresolved and now known:
   resizes Qud to 1793x997 — do not use it before a capture. `hv launch raves` is the pair start:
   it spawns Qud **borderless** at 1920x1080, which is what the baselines were taken at.
 - `darwin.py` implements no `drag()` at all, so `hv drag` is Windows-only regardless of button.
+
+### Resolution of the blocker, and Stage F results
+
+**It was never focus. The two windows OVERLAPPED by 124px** and Qud's toolbar click at global
+y=-1130 landed inside the Raves window (-2156..-1076), so Raves got the click and came forward.
+`hv launch raves` had reported `anchor 'CavesOfQud' not found` — the auto-placer ran before Qud's
+window existed, so Qud was never placed. Stacking them cleanly (Raves 0,-2160 / Qud 0,-1080, both
+1920x1080) made `hv goto qud status_equipment` pass first try.
+
+**The strict activate check was walked back.** It was built on
+`NSWorkspace.frontmostApplication()`, and read from the daemon that disagrees with the
+CGWindowList z-order — measured, they gave different answers on three of three activations, and
+Finder was seen activating instantly while the same read still named the old app. A hard failure
+on an untrustworthy instrument broke `raves within(status_screens)->in_game`, a route that
+worked. Activation still prefers `activateFromApplication_options_` (a real improvement: the old
+`activateWithOptions_` is a no-op on macOS 26 from a non-frontmost caller) and now REPORTS
+`frontmost confirmed/unconfirmed` instead of failing the step.
+
+| gate | result |
+|---|---|
+| **F1 vs B1** (Equipment, 33 leaves) | **PASS — 33/33 within ±0.01, max \|delta\| 0.010, nothing outside the ~0.7 noise** |
+| **F2 vs B2** (item popup, 7 leaves) | **PASS — 7/7 at exactly +0.00** |
+
+**The §3.3 prediction was correct.** `filter_image[0..4]` moved **+0.00** in both capture runs, so
+the strip is 12 cells and the recentre is arithmetically a no-op on this fixture, exactly as the
+arithmetic said.
+
+**One thing worth keeping:** the FIRST capture run showed a uniform `+1.43` on all five
+`filter_frame` leaves and `+0.71` on all five `filter_cell` leaves, with `filter_image` flat. The
+second run reproduced B1 exactly. So that was a capture-time artefact, not code — but it means a
+SINGLE capture can mislead by ~1.4 on that leaf family, and the uniform-across-a-family signature
+is the tell that it is not geometry. Score twice before believing a small move.

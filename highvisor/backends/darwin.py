@@ -711,29 +711,40 @@ class MacBackend(PlatformBackend):
         # problem for half an hour) but ignores the button, so the edges failed with the
         # pointer provably on target.
         me = NSRunningApplication.currentApplication()
-        moved = False
-        if hasattr(app, "activateFromApplication_options_"):
-            # 1|2 == ActivateAllWindows | ActivateIgnoringOtherApps
-            moved = bool(app.activateFromApplication_options_(me, 1 | 2))
-        if not moved:
-            moved = bool(app.activateWithOptions_(1 | 2))   # pre-14 fallback
-        # AND THEN CHECK. The API's return value is not evidence -- that is the whole bug
-        # above. Poll who is actually frontmost and report THAT, so a failed activation
-        # fails the step instead of handing the next click an unfocused window.
         want = int(w["kCGWindowOwnerPID"])
-        deadline = time.time() + 1.5
-        while time.time() < deadline:
-            front = NSWorkspace.sharedWorkspace().frontmostApplication()
-            if front is not None and int(front.processIdentifier()) == want:
-                return ActionResult(ok=True, tier=4,
-                                    detail="activated (frontmost pid=%d)" % want)
-            time.sleep(0.05)
-        front = NSWorkspace.sharedWorkspace().frontmostApplication()
-        return ActionResult.fail(
-            "activate did not take: asked for pid %d, frontmost is %s. macOS will refuse "
-            "cross-app activation in some states; nothing that needs focus (clicks, keys) "
-            "will work until it lands."
-            % (want, (front.localizedName() if front else "?")))
+
+        for attempt in range(2):
+            if hasattr(app, "activateFromApplication_options_"):
+                # 1|2 == ActivateAllWindows | ActivateIgnoringOtherApps
+                app.activateFromApplication_options_(me, 1 | 2)
+            else:
+                app.activateWithOptions_(1 | 2)          # pre-14 fallback
+            deadline = time.time() + 0.8
+            landed = False
+            while time.time() < deadline:
+                front = NSWorkspace.sharedWorkspace().frontmostApplication()
+                if front is not None and int(front.processIdentifier()) == want:
+                    landed = True
+                    break
+                time.sleep(0.05)
+            if landed:
+                break
+
+        # REPORTED, NOT ENFORCED, and the reason is that the instrument is not trustworthy
+        # enough to fail a step on. `NSWorkspace.frontmostApplication()` read from the daemon
+        # (no AppKit run loop) disagrees with the CGWindowList z-order -- measured 2026-08-08,
+        # the two gave different answers on all three of three activations, and Finder was
+        # observed activating instantly while the same read still named the old app. A hard
+        # failure built on that turns working routes into broken ones, which is exactly what
+        # it did to `raves within(status_screens)->in_game` before this was walked back.
+        #
+        # So: say what was observed and let the step's own verify decide. What actually
+        # bit here was never activation at all -- it was the two windows OVERLAPPING, so
+        # Qud's toolbar click landed inside the Raves window (measured: 124px of overlap,
+        # click at global y=-1130 inside Raves' -2156..-1076). Focus was the wrong suspect.
+        return ActionResult(ok=True, tier=4,
+                            detail="activated (frontmost %s)"
+                                   % ("confirmed" if landed else "unconfirmed"))
 
     def move(self, target: str, x: int, y: int, w: int, h: int,
              topmost: Optional[bool] = None) -> ActionResult:
