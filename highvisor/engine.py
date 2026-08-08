@@ -309,6 +309,15 @@ class Engine:
         if op == P.OP_QUDBACK:
             return self._qud_bridge("uiback")
 
+        if op == P.OP_QUDBRIDGE:
+            # Generic first-party passthrough. Every mod command so far got its own op
+            # (qudwish, qudback, loadsave...), which is fine for the handful the cockpit
+            # calls by name and useless for exercising a NEW one: `pick` was deployed to
+            # the mod and could not be invoked from the CLI at all, because reaching it
+            # meant either adding a fourth bespoke op or authoring a gametree edge around
+            # an unproven command. This is the "try it once" path those both lacked.
+            return self._qud_bridge(str(req.get("name", "")), args=req.get("args"))
+
         if op == P.OP_QUD_SAVES:
             return self._qud_saves()
 
