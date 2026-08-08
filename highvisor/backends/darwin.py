@@ -455,6 +455,28 @@ class MacBackend(PlatformBackend):
     def click(self, target: str, x: int, y: int, button: str = "left",
               double: bool = False, hover: bool = False,
               modifiers: str = "") -> ActionResult:
+        # THREE buttons, and the middle one is not optional decoration: Raves' Map Editor
+        # hangs its per-object context menu off MIDDLE click, deliberately, because Qud's
+        # own OnClick dispatches an unhandled `MiddleTile:x,y`. The CLI grew `--middle` with
+        # the Windows backend only; this reduced `button` to `right == "right"`, so a middle
+        # click here silently went out as a LEFT click — and the response `detail` echoes the
+        # button you ASKED for, so the CLI printed "middle click" either way. Unreachable
+        # feature plus invisible failure; parameterise all three instead.
+        BUTTONS = {
+            "left":   (Quartz.kCGMouseButtonLeft,   Quartz.kCGEventLeftMouseDown,
+                       Quartz.kCGEventLeftMouseUp),
+            "right":  (Quartz.kCGMouseButtonRight,  Quartz.kCGEventRightMouseDown,
+                       Quartz.kCGEventRightMouseUp),
+            # "Other" is Quartz's name for everything past the first two; the button NUMBER
+            # (Center == 2) is what distinguishes them, and CGEventCreateMouseEvent writes it
+            # into the event from this constant.
+            "middle": (Quartz.kCGMouseButtonCenter, Quartz.kCGEventOtherMouseDown,
+                       Quartz.kCGEventOtherMouseUp),
+        }
+        if button not in BUTTONS:
+            return ActionResult.fail("unknown mouse button %r (left|right|middle)" % button)
+        b, down, up = BUTTONS[button]
+
         w = self._resolve(target)
         if w is None:
             return ActionResult.fail("click needs a window target")
@@ -465,10 +487,6 @@ class MacBackend(PlatformBackend):
         time.sleep(0.06)
         src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
         pt = Quartz.CGPointMake(gx, gy)
-        right = button == "right"
-        b = Quartz.kCGMouseButtonRight if right else Quartz.kCGMouseButtonLeft
-        down = Quartz.kCGEventRightMouseDown if right else Quartz.kCGEventLeftMouseDown
-        up = Quartz.kCGEventRightMouseUp if right else Quartz.kCGEventLeftMouseUp
         # WARP the real OS cursor to the point so hover/position is correct (Unity
         # reads the actual cursor). Then post down/up exactly like a known-good
         # auto-clicker (othyn/macos-auto-clicker): HID source, HID tap, no click-state

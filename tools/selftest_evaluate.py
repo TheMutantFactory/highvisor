@@ -197,6 +197,7 @@ def assert_tolerance():
     popup_conditions()
     stranded_stage()
     dead_reporter()
+    mod_config_popup()
 
 
 def stranded_stage():
@@ -362,6 +363,118 @@ def popup_conditions():
           holds(None, {"popup": False}, st_clear))
     check("assert popup='message' rejects an input modal",
           not holds(None, {"popup": "message"}, st_input))
+
+
+def mod_config_popup():
+    """`loadsave` may answer ONE modal, matched on its text, chosen by the option's text.
+
+    THE BUG THIS REPLACES (merged from the PC branch, 2026-08-08). The original fired
+    `{"action":"option","index":1}` at whatever was up whenever `"popup" in scene.lower()`.
+    Qud's heartbeat sets `scene` from the raw view name, so *every* Qud modal satisfies that
+    test, and index 1 is a different button on a different modal. The specific hazard is
+    named in the code: this popup's PRE-SELECTED option relaunches Qud with our bridge
+    DISABLED, so guessing wrong here silently kills the mod for every later run.
+
+    Tested against a FAKE BRIDGE rather than reasoned about, because the real popup only
+    arises from a save whose mod configuration differs — a Lumpy-side condition that cannot
+    be reproduced on this machine. The socket protocol is the mod's: 4-byte big-endian
+    length, then JSON. The mod re-publishes the live popup to any joining client, which is
+    why connecting is enough to read it.
+    """
+    import json as _json
+    import socket as _socket
+    import struct as _struct
+    import threading
+
+    from highvisor.engine import Engine
+
+    def serve(frame):
+        """One-shot bridge that announces `frame` and records what gets sent back."""
+        srv = _socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(1)
+        got = []
+
+        def run():
+            conn, _ = srv.accept()
+            with conn:
+                if frame is not None:
+                    p = _json.dumps(frame).encode()
+                    conn.sendall(_struct.pack(">I", len(p)) + p)
+                conn.settimeout(2.0)
+                buf = b""
+                try:
+                    while len(buf) < 4 or len(buf) < 4 + _struct.unpack(">I", buf[:4])[0]:
+                        c = conn.recv(65536)
+                        if not c:
+                            break
+                        buf += c
+                except (OSError, _socket.timeout):
+                    pass
+                if len(buf) >= 4:
+                    n = _struct.unpack(">I", buf[:4])[0]
+                    if len(buf) >= 4 + n:
+                        got.append(_json.loads(buf[4:4 + n]))
+            srv.close()
+
+        t = threading.Thread(target=run, daemon=True); t.start()
+        return srv.getsockname()[1], got, t
+
+    def ask(frame):
+        port, got, t = serve(frame)
+        # `self` is only used for the two class-level match constants, so the class
+        # itself stands in for an instance -- no daemon, no backend, no app.
+        r = Engine._answer_mod_config_popup(Engine, port)
+        t.join(timeout=3)
+        return r, (got[0] if got else None)
+
+    MODCFG = {"type": "popup", "active": True, "kind": "menu",
+              "message": "This save game was created with a different mod configuration.",
+              "title": "Mod Configuration Differs",
+              "options": [{"text": "Restart using save game's mod configuration"},
+                          {"text": "Load keeping current mod configuration"}]}
+
+    print("\nloadsave: the one modal it may answer")
+
+    r, sent = ask(MODCFG)
+    check("answers the Mod Configuration popup", r.get("answered"), repr(r))
+    check("...by the option's LABEL, not a fixed index",
+          r.get("chose") == "Load keeping current mod configuration", repr(r.get("chose")))
+    check("...and sends that option's real position",
+          sent == {"type": "command", "name": "popup", "action": "option", "index": 1},
+          repr(sent))
+
+    # THE POINT OF THE REWRITE: same popup, options in the other order. Index 1 is now the
+    # bridge-disabling choice, so anything positional gets this exactly wrong.
+    flipped = dict(MODCFG, options=list(reversed(MODCFG["options"])))
+    r, sent = ask(flipped)
+    check("follows the label when the options are reordered",
+          r.get("chose") == "Load keeping current mod configuration", repr(r.get("chose")))
+    check("...which is index 0 there, not 1", (sent or {}).get("index") == 0, repr(sent))
+
+    # A DIFFERENT MODAL. The old code answered this one too.
+    other = {"type": "popup", "active": True, "kind": "menu",
+             "message": "Do you want to save first?", "title": "",
+             "options": [{"text": "Yes"}, {"text": "No"}]}
+    r, sent = ask(other)
+    check("declines an unrelated modal", not r.get("answered"), repr(r))
+    check("...sends it nothing at all", sent is None, repr(sent))
+    check("...and names what it saw, so the failure is legible",
+          "save first" in (r.get("saw") or ""), repr(r.get("saw")))
+
+    # The right modal, but without the option we expect: refuse rather than fall back to a
+    # position, because Qud's own default here is the one that disables the mod.
+    r, sent = ask(dict(MODCFG, options=[{"text": "Restart using save game's mod configuration"}]))
+    check("refuses the right modal when the safe option is absent", not r.get("answered"), repr(r))
+    check("...sends nothing rather than guessing", sent is None, repr(sent))
+    check("...and says why", "no 'keeping current' option" in (r.get("error") or "").lower()
+          or "keeping current" in (r.get("error") or ""), repr(r.get("error")))
+
+    # No modal up at all, and a dead bridge: both must be quiet non-answers.
+    r, sent = ask(None)
+    check("no modal up -> no answer, no error", not r.get("answered") and not r.get("saw"), repr(r))
+    srv = _socket.socket(); srv.bind(("127.0.0.1", 0)); dead = srv.getsockname()[1]; srv.close()
+    r = Engine._answer_mod_config_popup(Engine, dead)
+    check("a closed bridge is reported, not raised", not r.get("answered") and r.get("error"),
+          repr(r))
 
 
 if __name__ == "__main__":

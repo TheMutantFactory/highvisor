@@ -17,6 +17,7 @@ statically).
 
     python3 tools/selftest_plan.py
 """
+import json
 import os
 import sys
 
@@ -288,6 +289,37 @@ def real():
         for rule in plan.preflight(tree, app):
             check("%s preflight rule has when+steps" % app,
                   bool(rule.get("when")) and bool(rule.get("steps")))
+
+    # 8. THE PER-OS SEAM CANNOT STRAND A PLATFORM.
+    #
+    # A step tagged `{"os": "nt"}` is skipped on macOS and vice versa, which is what lets one
+    # edge carry both a click_text (needs OCR, darwin only) and the coordinate form Windows
+    # has to use. The hazard is specific and it is this repo's favourite: if EVERY actuating
+    # step of an edge is tagged for the other platform, the edge runs, skips everything, and
+    # reports ok -- a check that cannot fail, driving nothing. So for each os value, strip the
+    # steps that machine would skip and demand something is left that actually acts.
+    #
+    # `sleep`/`note` are not actuating; neither is a bare `activate`, which only raises a
+    # window. An edge whose remaining steps are all of those has become a no-op.
+    INERT = {"sleep", "note", "activate", "window", "timeout", "os", "offset", "focus"}
+    seamed = 0
+    for e in tree.get("transitions") or []:
+        steps = e.get("steps") or []
+        if not any(isinstance(s, dict) and "os" in s for s in steps):
+            continue
+        seamed += 1
+        label = "%s %s -> %s" % (e.get("app"), json.dumps(e.get("from")), e.get("to"))
+        for osname in ("posix", "nt"):
+            kept = [s for s in steps if s.get("os", osname) == osname]
+            acts = [s for s in kept if set(s) - INERT]
+            check("os seam: %s still acts on %s" % (label, osname), acts,
+                  "every actuating step is tagged for the other platform")
+        # An `os` value that matches no platform silently disables the step everywhere.
+        bad = sorted({s["os"] for s in steps if s.get("os") not in (None, "posix", "nt")})
+        check("os seam: %s uses known os values" % label, not bad, "unknown: %s" % bad)
+    check("the os seam is actually exercised by the tree", seamed > 0,
+          "no step carries an `os` field -- this check proves nothing")
+    print("  ...%d edges carry per-os steps" % seamed)
 
 
 def _spec_nodes(spec):
