@@ -316,7 +316,10 @@ class Engine:
             # the mod and could not be invoked from the CLI at all, because reaching it
             # meant either adding a fourth bespoke op or authoring a gametree edge around
             # an unproven command. This is the "try it once" path those both lacked.
-            return self._qud_bridge(str(req.get("name", "")), args=req.get("args"))
+            # focus defaults ON (see _qud_bridge) -- callers opt OUT to reproduce what a
+            # command does with Qud in the background, which is Raves' normal case.
+            return self._qud_bridge(str(req.get("name", "")), args=req.get("args"),
+                                    focus=bool(req.get("focus", True)))
 
         if op == P.OP_QUD_SAVES:
             return self._qud_saves()
@@ -854,7 +857,10 @@ class Engine:
                 # sent from there worked while `hv back` silently did nothing.
                 import time as _t2
                 _t2.sleep(0.4)
-            return {"ok": True, "name": name, "focused": True, "held": 0.4}
+            # `focused` echoes what we DID, not a measurement -- it was hardcoded True and so
+            # reported a focused send for a --no-focus one, in the middle of an experiment
+            # about focus. (Whether the activate actually took is `hv activate`'s business.)
+            return {"ok": True, "name": name, "focused": bool(focus), "held": 0.4}
         except OSError as e:
             return {"ok": False, "error": "Qud bridge :%s unreachable (%s)" % (port, e)}
 

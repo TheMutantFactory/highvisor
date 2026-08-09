@@ -325,7 +325,8 @@ def _cmd_bridge(a):
             print("args must be key=value, got %r" % kv)
             raise SystemExit(2)
         args[k] = v
-    res = _call({"op": P.OP_QUDBRIDGE, "name": a.name, "args": args})
+    res = _call({"op": P.OP_QUDBRIDGE, "name": a.name, "args": args,
+                 "focus": not a.no_focus})
     _print_json(res)
     raise SystemExit(0 if res.get("ok") else 1)
 
@@ -1133,6 +1134,8 @@ def build_parser():
     s = sub.add_parser("bridge", help="send ANY first-party mod command, e.g. hv bridge pick label='New Game'")
     s.add_argument("name", help="the mod command name (pick, uiback, statustab, export, ...)")
     s.add_argument("args", nargs="*", help="key=value pairs passed as the command's args")
+    s.add_argument("--no-focus", action="store_true",
+                   help="do NOT activate Qud first. Qud does not drain the mod's uiQueue in the\nbackground, so this is WRONG for anything that drives Unity UI -- but it is the only\nway to test what a command does with the game unfocused, which is how Raves drives it")
     s.set_defaults(fn=_cmd_bridge)
 
     sub.add_parser("saves", help="Qud's save list + picker row order, from DISK (no game launch)").set_defaults(fn=_cmd_saves)
