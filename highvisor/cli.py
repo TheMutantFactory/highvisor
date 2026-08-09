@@ -310,6 +310,26 @@ def _cmd_scroll(a):
     raise SystemExit(0 if res.get("ok") else 1)
 
 
+def _cmd_bridge(a):
+    """Send any first-party mod command. `hv bridge pick label='New Game'`.
+
+    Args are key=value so a one-off command can be exercised without inventing a
+    protocol op for it — which is what blocked `pick` the moment it was deployed:
+    reaching it meant a fourth bespoke op or a gametree edge built around a
+    command nobody had yet run once.
+    """
+    args = {}
+    for kv in a.args:
+        k, _, v = kv.partition("=")
+        if not _:
+            print("args must be key=value, got %r" % kv)
+            raise SystemExit(2)
+        args[k] = v
+    res = _call({"op": P.OP_QUDBRIDGE, "name": a.name, "args": args})
+    _print_json(res)
+    raise SystemExit(0 if res.get("ok") else 1)
+
+
 def _cmd_wish(a):
     """Run a Caves of Qud wish through the Raves mod bridge (godmode, item:..., xp:...)."""
     res = _call({"op": P.OP_QUDWISH, "wish": " ".join(a.text)})
@@ -1109,6 +1129,11 @@ def build_parser():
     s = sub.add_parser("wish", help="run a Caves of Qud wish via the Raves bridge, e.g. hv wish godmode")
     s.add_argument("text", nargs="+", help="the wish text (godmode | item:<Blueprint> | xp:<n> | ...)")
     s.set_defaults(fn=_cmd_wish)
+
+    s = sub.add_parser("bridge", help="send ANY first-party mod command, e.g. hv bridge pick label='New Game'")
+    s.add_argument("name", help="the mod command name (pick, uiback, statustab, export, ...)")
+    s.add_argument("args", nargs="*", help="key=value pairs passed as the command's args")
+    s.set_defaults(fn=_cmd_bridge)
 
     sub.add_parser("saves", help="Qud's save list + picker row order, from DISK (no game launch)").set_defaults(fn=_cmd_saves)
 

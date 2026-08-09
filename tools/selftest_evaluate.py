@@ -105,7 +105,10 @@ def main():
     r = gametree.evaluate(real, "qud", sig(scene="play", game_live=False, port_open=True))
     check("REAL tree: scene=play + game_live False reads as in_game, not title",
           r["node"] == "in_game", "%s via %s" % (r["node"], r["via"]))
-    r = gametree.evaluate(real, "qud", sig(scene="MainMenu", game_live=False, port_open=True))
+    # TitleScreen, not MainMenu: the mod names the title POSITIVELY now, because the legacy view
+    # field says "MainMenu" for every modern WindowBase menu too, so that scene could not tell the
+    # title from a chargen screen. This fixture tracked the old name and had been failing since.
+    r = gametree.evaluate(real, "qud", sig(scene="TitleScreen", game_live=False, port_open=True))
     check("REAL tree: the title still reads as the title", r["node"] == "title",
           "%s via %s" % (r["node"], r["via"]))
     r = gametree.evaluate(real, "raves", sig(scene="status_journal"))
@@ -279,7 +282,7 @@ def dead_reporter():
     print("\ndead/stale reporter (no first-party state)")
 
     # 1. FRESH report -> unchanged behaviour, both directions
-    r = gametree.evaluate(real, "qud", sig(scene="MainMenu", report="fresh", game_live=False))
+    r = gametree.evaluate(real, "qud", sig(scene="TitleScreen", report="fresh", game_live=False))
     check("a fresh report still resolves the title by SCENE",
           r["node"] == "title" and r["via"] == "scene", "%s via %s" % (r["node"], r["via"]))
     r = gametree.evaluate(real, "qud", sig(scene="play", report="fresh", game_live=True))

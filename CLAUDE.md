@@ -264,6 +264,15 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   are separate and case-insensitive — `hv key win escape` goes out as a real scan-code VK.
   (Both of these are facts about `uiautomation.SendKeys`, which is a Windows API the
   darwin backend does not use — they do not describe the Mac path.)
+- **A SINGLE printable char is delivered differently depending on the destination, and it has to
+  be.** To a top-level window (Godot/Unity, which expose no editable child) it goes as a VK
+  keydown/keyup: the app translates the key itself and gets BOTH a `keycode` and the character.
+  To a real EDIT child it goes as `WM_CHAR`, which is the only thing that inserts text there.
+  Do **not** "fix" this by sending the full WM_KEYDOWN→WM_CHAR→WM_KEYUP sequence a real keystroke
+  produces — measured on Raves, that types every character TWICE ("base" → "bbaassee"), because
+  Godot already makes text out of the keydown. Until 2026-08-08 single chars were WM_CHAR-only
+  everywhere, so `hv key win r` typed an "r" but could never fire an `event.keycode == KEY_R`
+  binding — and still reported ok.
 - A `[Errno 49] Can't assign requested address` from any hv call is TRANSIENT — just retry.
 - Qud's window FREEZES when unfocused (Unity doesn't repaint) — `hv activate` + ~2s before a
   shot, or you'll diff a stale frame. The mod/bridge still runs unfocused; only pixels freeze.
@@ -272,6 +281,15 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   HID-sourced or not. Exit them with the mod's first-party `uiback` bridge command
   (gametree `{"bridge": "uiback"}` step / `{"dismiss": {..., "bridge": "uiback"}}`),
   never key injection. Clicks DO land (warp + HID button pair).
+- **Qud's CHARGEN screens ignore the mod's own push APIs too, and that is the deeper
+  version of the rule above.** `Keyboard.PushCommand`/`PushMouseEvent` feed the LEGACY
+  console queue; the chargen module windows are modern `Qud.UI` windows that do not read
+  it. Every tag form through either carrier moved exactly **0 pixels** — and zero every
+  time with never a near-miss is the signature of a queue nobody reads, not of a wrong
+  tag. Drive them with `{"bridge": "choose", "args": {"label": "Classic"}}`, which calls
+  the window's own `GetSelections()` + selection handler in the mod (`UiDriver`). It
+  matches by label, so it cannot land on the wrong card the way a coordinate can. The
+  mod's `reflect` command dumps any live window's methods when a new screen needs one.
 - Menu recipes click by LABEL, not coords: `{"click_text": "Records", "window": ...}` —
   fixed coords started stray games twice when the menu reflowed / the window sat
   off-slot. On Windows there is no OCR backend, so those edges carry the
