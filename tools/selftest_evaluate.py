@@ -201,6 +201,7 @@ def assert_tolerance():
     stranded_stage()
     dead_reporter()
     mod_config_popup()
+    live_probe_cache()
 
 
 def stranded_stage():
@@ -478,6 +479,87 @@ def mod_config_popup():
     r = Engine._answer_mod_config_popup(Engine, dead)
     check("a closed bridge is reported, not raised", not r.get("answered") and r.get("error"),
           repr(r))
+
+
+def live_probe_cache():
+    """`game_live` is CACHED when true and never when false, and the cache is not a lie.
+
+    The probe is a real bridge client: connect, read a byte, drop. `hv state` runs it on every
+    evaluation and the cockpit evaluates ~2/s, so the mod saw a connect-and-drop twice a second
+    forever -- which re-announces any live popup to every client and spams Qud's log. Caching
+    the POSITIVE is safe (bytes mean a game is running, and that does not stop being true in
+    two seconds); caching a negative would delay the `title -> in_game` arrival every caller of
+    `hv assert` is waiting for.
+
+    Counting CONNECTIONS is the check, because it is the connection -- not the verdict -- that
+    causes the harm. Asserting only on the returned booleans would pass with the cache removed.
+    """
+    import socket as _socket
+    import threading
+    import time as _time
+
+    from highvisor.engine import Engine
+
+    def serve(send_byte, n=8):
+        """A listener that answers `n` probes; returns (port, counter, stop)."""
+        srv = _socket.socket()
+        srv.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", 0)); srv.listen(4); srv.settimeout(0.5)
+        seen = []
+        run = [True]
+
+        def loop():
+            while run[0]:
+                try:
+                    conn, _ = srv.accept()
+                except (OSError, _socket.timeout):
+                    continue
+                seen.append(1)
+                with conn:
+                    if send_byte[0]:
+                        try: conn.sendall(b"x")
+                        except OSError: pass
+                    else:
+                        _time.sleep(0.4)      # silence, like a Qud sitting on a menu
+            srv.close()
+
+        t = threading.Thread(target=loop, daemon=True); t.start()
+        return srv.getsockname()[1], seen, run
+
+    class Probe:                      # a bare `self` -- the method only stores a dict on it
+        _LIVE_TTL = Engine._LIVE_TTL
+
+    live = [True]
+    port, seen, run = serve(live)
+    p = Probe()
+    a = Engine._game_live(p, port)
+    b = Engine._game_live(p, port)
+    check("a live game reads live", a == (True, True), repr(a))
+    check("...and the second read is served from cache (ONE connection, not two)",
+          len(seen) == 1, "%d connections" % len(seen))
+    check("...still reporting live", b == (True, True), repr(b))
+
+    # A NEGATIVE is never cached: every call must go back to the wire, or an arrival is missed.
+    live[0] = False
+    p2 = Probe()
+    seen.clear()
+    c = Engine._game_live(p2, port)
+    d = Engine._game_live(p2, port)
+    check("a menu screen reads not-live", c == (True, False) and d == (True, False),
+          "%r %r" % (c, d))
+    check("...and is re-probed every time (no cached negative)", len(seen) == 2,
+          "%d connections" % len(seen))
+
+    # …so the arrival is seen on the very next call, with no TTL to wait out.
+    live[0] = True
+    e = Engine._game_live(p2, port)
+    check("an arrival is seen immediately after a negative", e == (True, True), repr(e))
+
+    run[0] = False
+    _time.sleep(0.05)
+    srv = _socket.socket(); srv.bind(("127.0.0.1", 0)); dead = srv.getsockname()[1]; srv.close()
+    f = Engine._game_live(Probe(), dead)
+    check("a closed port is (False, False), not an exception", f == (False, False), repr(f))
 
 
 if __name__ == "__main__":

@@ -864,6 +864,54 @@ class Engine:
         except OSError as e:
             return {"ok": False, "error": "Qud bridge :%s unreachable (%s)" % (port, e)}
 
+    # A live-game probe result, cached POSITIVELY only. port -> expiry timestamp.
+    _LIVE_TTL = 2.0
+
+    def _game_live(self, port):
+        """(port_open, game_live) for the mod bridge.
+
+        The mod's listener is open even at Qud's MAIN MENU (it starts at load), so port-open
+        alone cannot tell menu from in-game. But the mod force-publishes a snapshot on connect
+        ONLY when a game is live, so a brief read is the true liveness signal: bytes -> a game
+        is running; silence -> a menu screen. Mirrors MainMenu's own probe.
+
+        CACHED, AND ONLY WHEN TRUE. This probe is a real bridge CLIENT -- it connects, reads a
+        byte and drops -- and `hv state` runs it on every evaluation, which the cockpit does
+        about twice a second. Every one of those connects fires the mod's OnConnect, which
+        re-announces any live popup to every connected client (raves-of-qud PopupBridge) and
+        fills Qud's Player.log with connected/disconnected/"dropped slow client" for as long as
+        the modal is up. Two of that churn's consequences were real bugs: half-typed AskString
+        text resetting, and an option list's selection springing back to the first row.
+
+        The asymmetry is the one the tree already rests on: bytes mean a game is running, and
+        that does not stop being true within two seconds. Silence means nothing on its own and
+        is exactly what a caller waiting for `title -> in_game` needs re-measured every poll.
+        So an ARRIVAL is never delayed by this cache; only a departure can read stale, and only
+        for _LIVE_TTL.
+        """
+        import socket as _socket
+        import time as _t
+        cache = getattr(self, "_live_until", None)
+        if cache is None:
+            cache = self._live_until = {}
+        if cache.get(port, 0.0) > _t.time():
+            return True, True
+        try:
+            with _socket.create_connection(("127.0.0.1", port), timeout=0.4) as sk:
+                sk.settimeout(0.35)
+                try:
+                    live = len(sk.recv(1)) > 0
+                except (_socket.timeout, OSError):
+                    live = False
+        except OSError:
+            cache.pop(port, None)
+            return False, False
+        if live:
+            cache[port] = _t.time() + self._LIVE_TTL
+        else:
+            cache.pop(port, None)
+        return True, live
+
     # ------------------------------------------------------- qud saves (from DISK)
     def _qud_saves(self):
         """The save list AND the Load Game picker's row order, read from disk —
@@ -1267,23 +1315,7 @@ class Engine:
                        "tab": self._read_tab(cfg.get("state_file"), wpid)}
             port = cfg.get("port")
             if port:
-                try:
-                    with socket.create_connection(("127.0.0.1", int(port)), timeout=0.4) as s:
-                        signals["port_open"] = True
-                        # The mod's bridge listener is open even at Qud's MAIN MENU (it starts at
-                        # load), so port-open alone can't tell menu from in-game. But the mod
-                        # force-publishes a snapshot to every client on connect ONLY when a game is
-                        # actually live (the server is multi-client, so this is harmless to Raves's
-                        # own connection). So a brief read is the true liveness signal: bytes -> a
-                        # game is running; silence -> a menu screen. Mirrors MainMenu's own probe.
-                        s.settimeout(0.35)
-                        try:
-                            signals["game_live"] = len(s.recv(1)) > 0
-                        except (socket.timeout, OSError):
-                            signals["game_live"] = False
-                except OSError:
-                    signals["port_open"] = False
-                    signals["game_live"] = False
+                signals["port_open"], signals["game_live"] = self._game_live(int(port))
             if ocr and win is not None:
                 try:
                     res = b.ocr(win.id)
