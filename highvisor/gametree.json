@@ -1253,6 +1253,16 @@
                           "raves": 1.0
                         },
                         "detect": {}
+                      },
+                      {
+                        "id": "item_popup_title_row",
+                        "label": "Title row (PolatFrameSuperHeader)",
+                        "note": "Qud's titled popup, e.g. KeybindsScreen.SelectInputType -> Popup.PickOptionAsync(\"Select Controller\", ...). Measured on Qud (221.13x121.00 @ 849.43,479.50; the title row's own width sizes the box, and header text is tracked at 0.67em against the body's 0.6em). Raves' branch was found WRONG on a pre-fix capture (box 211 vs 221.13, title ink 161 vs 178) and is fixed on the model. RENDER CHECK OUTSTANDING: the popup raises reliably but does not mirror reliably -- PopupBridge.Ensure() only arms from Bridge.TickRender, which does not fire while a popup parks the turn thread. See raves-of-qud reports/2026-08-05-item-popup/README.md and docs/gotchas.md.",
+                        "done": {
+                          "qud": 1.0,
+                          "raves": 0.5
+                        },
+                        "detect": {}
                       }
                     ]
                   }

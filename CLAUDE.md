@@ -127,6 +127,27 @@ itself). Both confident, both wrong, and `gamego` plans from them.
   No bytes imply nothing. Keep positives, drop negatives.
 - If an app ever ships without a reporter, **give it one** rather than restoring the fallback.
 
+**A REPORT IS ONLY AS GOOD AS THE CODE BEHIND IT — a first-party "no" is not a measurement**
+(2026-08-08). The rule above says a dead reporter must look dead. This is its sharper case: a
+reporter that is *alive and answering* can still be reporting the absence of something it has
+simply failed to render. Raves' `PopupOverlay` stopped building (a GDScript type error aborted
+its builder), so `raves_state.json` faithfully published `no popup` — fresh, correct pid,
+everything the reader checks — for popups that Qud was raising the whole time. `hv state`
+showed no popup. `hv assert --popup` would have timed out. Both were right about Raves and
+told you nothing about Qud, and a whole session was spent concluding "Qud raises no popups,
+surviving a clean pair restart" from them.
+
+- **Never let one app's report stand as evidence about the OTHER app.** For the popup channel
+  the two independent sources are the mod's bridge frames (tap :48710 and read
+  `type:"popup"`) and `hv shot CavesOfQud`. Either settles Qud's half in seconds.
+- The same asymmetry as `game_live`: a report saying "X is present" is near-sound, a report
+  saying "X is absent" is satisfied by every way the reporter could be broken. **Keep the
+  positives, distrust the negatives** — including the ones that arrive on time.
+- `hv goto qud quit_dialog` is still UNREACHABLE (no transition enters it). The Quit X on the
+  title screen is a `click_hover` at window point **(50, 48)**, measured — it raises Qud's
+  only MENU-level popup, which is the one case that proves a mirror works with no game and no
+  player. Worth an edge, plus a return edge that answers `No`.
+
 **Reports are PER-PROCESS.** A shared path has one writer per running instance: three live Raves
 had `raves_state.json` cycling `in_game → status_tinkering → title` every 2s, so every read was a
 coin flip — that, not a reporter bug, is why the tree "lied" and `hv goto raves in_game` needed
