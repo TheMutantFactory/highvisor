@@ -1878,42 +1878,10 @@
       "to": "new_game",
       "steps": [
         {
-          "activate": "CavesOfQud"
-        },
-        {
-          "click_text": "New Game",
-          "window": "CavesOfQud",
-          "os": "posix"
-        },
-        {
-          "click_hover": [
-            960,
-            250
-          ],
-          "window": "CavesOfQud",
-          "note": "FOCUS PRIME. Windows swallows the first click into an unfocused window to raise it, so the click that matters must never be the first one. y=250 is empty on the TITLE, which is the only screen this edge starts from -- do not copy it onto a chargen edge, where a click on empty space is not inert but CONFIRMS the current selection.",
-          "os": "nt"
-        },
-        {
-          "click_hover": [
-            960,
-            534
-          ],
-          "window": "CavesOfQud",
-          "note": "select New Game",
-          "os": "nt"
-        },
-        {
-          "sleep": 0.6
-        },
-        {
-          "click_hover": [
-            960,
-            534
-          ],
-          "window": "CavesOfQud",
-          "note": "activate it",
-          "os": "nt"
+          "bridge": "pick",
+          "args": {
+            "label": "New Game"
+          }
         },
         {
           "sleep": 1.0
@@ -1923,7 +1891,7 @@
         "node": "new_game"
       },
       "timeout": 15,
-      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || Windows-viable coordinates: click_text needs OCR and ocr() exists only in the darwin backend, so every Qud chargen route died here with `ocr failed:`. The verify was `ocr_contains: 'game mode'`, unrunnable for the same reason the step was; `node` uses the first-party window report instead. TWO clicks, not one, and the reason is a trap worth keeping: New Game is only the default selection while NO SAVE EXISTS. Once chargen has been run once, Qud's title defaults to Continue instead, and a one-click edge written against a fresh install then lands on the wrong row -- measured 2026-08-08, when this edge began failing mid-session for no reason other than that the earlier runs had created a save. The first click selects, the second activates; that holds under both defaults."
+      "note": "FIRST-PARTY, same move as title->game_mode (Qud hosts game mode and the rest of chargen in one screen). Converted 2026-08-08 after `bridge: pick` was verified on macOS too: it replaces a per-OS seam (click_text for posix, a focus-prime plus a select-then-activate double click for nt) with one call that needs no OCR, no coordinates and no focus -- and whose correctness does not depend on WHETHER A SAVE EXISTS, which the coordinate form did (New Game is only the default row on a fresh install; once chargen has run the title defaults to Continue)."
     },
     {
       "app": "qud",
@@ -2485,26 +2453,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "k",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             275,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2512,7 +2472,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2523,26 +2483,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "x",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             490,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2550,7 +2502,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2561,26 +2513,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "e",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             726,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2588,7 +2532,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2599,26 +2543,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "n",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             908,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2626,7 +2562,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2637,26 +2573,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "j",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             1080,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2664,7 +2592,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2675,26 +2603,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "q",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             1236,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2702,7 +2622,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2713,26 +2633,18 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "ctrl+f",
-          "window": "Raves of Qud",
-          "os": "posix"
-        },
-        {
           "key": "f2",
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         },
         {
-          "sleep": 0.8,
-          "os": "nt"
+          "sleep": 0.8
         },
         {
           "click": [
             1408,
             136
           ],
-          "window": "Raves of Qud",
-          "os": "nt"
+          "window": "Raves of Qud"
         }
       ],
       "verify": {
@@ -2740,7 +2652,7 @@
         "app": "raves"
       },
       "timeout": 15,
-      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen."
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
