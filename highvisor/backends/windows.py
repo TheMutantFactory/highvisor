@@ -110,6 +110,9 @@ def _configure_win32():
          [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
           ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
           wintypes.DWORD]),
+        # SHORT, not int: the high byte carries the shift state and the low byte the VK,
+        # and -1 means "this character has no key on the current layout".
+        (user32.VkKeyScanW, ctypes.c_short, [ctypes.c_wchar]),
     ]
     for fn, res, args in sig:
         fn.restype, fn.argtypes = res, args
@@ -789,8 +792,33 @@ class WindowsBackend(PlatformBackend):
             user32.PostMessageW(dest, WM_KEYUP, vk, 0)
             return ActionResult(ok=True, tier=2, detail="PostMessage VK 0x%02X" % vk)
         if len(name) == 1:
+            # A single printable character used to go out as WM_CHAR ALONE, always. That is a
+            # TEXT message carrying no virtual-key, so anything dispatching on a KEY — Godot's
+            # `event.keycode`, Unity's Input System — saw nothing, while text fields worked
+            # perfectly. Silent and asymmetric: `hv key win r` typed an "r" into a LineEdit but
+            # could not fire an `event.keycode == KEY_R` binding, and still reported ok.
+            #
+            # The two destinations want DIFFERENT messages, which is why this is not simply
+            # "post the whole WM_KEYDOWN -> WM_CHAR -> WM_KEYUP sequence a real keystroke
+            # produces". Measured on Raves (Godot) 2026-08-08: posting all three typed every
+            # character TWICE ("base" -> "bbaassee"), because Godot translates WM_KEYDOWN into
+            # text itself and then takes the WM_CHAR as a second character.
+            #
+            #   - a real EDIT child: inserts on WM_CHAR; a bare WM_KEYDOWN inserts nothing
+            #   - a top-level window (Godot/Unity, which expose no editable child): translates
+            #     the key itself, so the VK alone yields BOTH the keycode and the character
+            if edit is not None and edit.NativeWindowHandle:
+                user32.PostMessageW(dest, WM_CHAR, ord(name), 0)
+                return ActionResult(ok=True, tier=2, detail="PostMessage WM_CHAR %r (edit)" % name)
+            vks = user32.VkKeyScanW(name)
+            if vks != -1:
+                vk = vks & 0xFF
+                user32.PostMessageW(dest, WM_KEYDOWN, vk, 0)
+                user32.PostMessageW(dest, WM_KEYUP, vk, 0)
+                return ActionResult(ok=True, tier=2, detail="PostMessage VK 0x%02X (%r)" % (vk, name))
+            # No key produces this character on the current layout — text only is all there is.
             user32.PostMessageW(dest, WM_CHAR, ord(name), 0)
-            return ActionResult(ok=True, tier=2, detail="PostMessage WM_CHAR %r" % name)
+            return ActionResult(ok=True, tier=2, detail="PostMessage WM_CHAR %r (no VK)" % name)
 
         # Tier 4: combos / long sequences — activate then send globally.
         # (PostMessage can't carry modifier state reliably; see research findings.)

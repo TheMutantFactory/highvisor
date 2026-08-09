@@ -255,6 +255,15 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   looks like a silently ignored hotkey. Verified on a Raves `LineEdit`: "abcdef" → `{Ctrl}a` →
   `Z` leaves "Z". (Not WSH's `^a` either; uiautomation uses the braced form.) Single named keys
   are separate and case-insensitive — `hv key win escape` goes out as a real scan-code VK.
+- **A SINGLE printable char is delivered differently depending on the destination, and it has to
+  be.** To a top-level window (Godot/Unity, which expose no editable child) it goes as a VK
+  keydown/keyup: the app translates the key itself and gets BOTH a `keycode` and the character.
+  To a real EDIT child it goes as `WM_CHAR`, which is the only thing that inserts text there.
+  Do **not** "fix" this by sending the full WM_KEYDOWN→WM_CHAR→WM_KEYUP sequence a real keystroke
+  produces — measured on Raves, that types every character TWICE ("base" → "bbaassee"), because
+  Godot already makes text out of the keydown. Until 2026-08-08 single chars were WM_CHAR-only
+  everywhere, so `hv key win r` typed an "r" but could never fire an `event.keycode == KEY_R`
+  binding — and still reported ok.
 - A `[Errno 49] Can't assign requested address` from any hv call is TRANSIENT — just retry.
 - Qud's window FREEZES when unfocused (Unity doesn't repaint) — `hv activate` + ~2s before a
   shot, or you'll diff a stale frame. The mod/bridge still runs unfocused; only pixels freeze.
