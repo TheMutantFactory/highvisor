@@ -175,12 +175,20 @@ class Engine:
             return {"ok": True, "targets": rows}
 
         if op == P.OP_SHOT:
+            settled = None
+            if req.get("live"):
+                settled = self._settle_rendering(
+                    b, req.get("target"),
+                    max_age=float(req.get("live_age") or 2),
+                    timeout=float(req.get("live_timeout") or 30))
             png = b.screenshot(req.get("target"), native=bool(req.get("native")))
             resp = {"ok": True, "bytes": len(png),
                     "png_b64": base64.b64encode(png).decode("ascii")}
             dims = _png_dims(png)
             if dims:
                 resp["w"], resp["h"] = dims
+            if settled is not None:
+                resp.update(settled)
             return resp
 
         # For actions, the response IS the ActionResult dict: its ``ok`` reports
@@ -300,6 +308,15 @@ class Engine:
 
         if op == P.OP_QUDBACK:
             return self._qud_bridge("uiback")
+
+        if op == P.OP_QUDBRIDGE:
+            # Generic first-party passthrough. Every mod command so far got its own op
+            # (qudwish, qudback, loadsave...), which is fine for the handful the cockpit
+            # calls by name and useless for exercising a NEW one: `pick` was deployed to
+            # the mod and could not be invoked from the CLI at all, because reaching it
+            # meant either adding a fourth bespoke op or authoring a gametree edge around
+            # an unproven command. This is the "try it once" path those both lacked.
+            return self._qud_bridge(str(req.get("name", "")), args=req.get("args"))
 
         if op == P.OP_QUD_SAVES:
             return self._qud_saves()
@@ -799,21 +816,26 @@ class Engine:
         from .apps import PROFILES
         win = PROFILES.get("qud", {}).get("window", "CavesOfQud")
         if focus:
+            # WAIT FOR THE QUEUE TO BE DRAINING, don't guess at it. This used to check
+            # "is Qud frontmost" and, if not, activate and sleep a flat 2s. Both halves
+            # were wrong in the same direction. `activate` frequently does not take
+            # (three attempts in a row measured before one landed), and frontmost is not
+            # the condition that matters -- a Qud that IS frontmost but has stopped
+            # rendering drains nothing, and that case paid no settle at all because the
+            # front check passed.
+            #
+            # The failure is silent by construction: a TCP write to the mod cannot fail
+            # just because the queue is parked, so the command reports ok and simply
+            # never happens. A FULL 2 sweep across the status tabs failed six of eight
+            # this way, each tab reporting the PREVIOUS tab -- the statustab frames were
+            # sitting in an undrained queue, applying one step late when the next
+            # capture's activate happened to land.
+            #
+            # ui_age settles that directly: it is only low if the UI actually ran.
             try:
-                # Only pay the settle when Qud isn't already frontmost — list_targets is
-                # front-to-back, so the first entry is the active window.
-                tops = self.backend.list_targets()
-                front = (tops[0].to_dict().get("title") or "") if tops else ""
-                if win not in front:
-                    self.backend.activate(win)
-                    import time as _t
-                    # 2s, measured. Unity needs a beat AFTER regaining focus before it drains
-                    # the mod's uiQueue again: at 0.35s the command still landed in a queue that
-                    # wasn't running yet and did nothing. Shorter is not safer here, it is just
-                    # a failure that looks like success.
-                    _t.sleep(2.0)
+                self._settle_rendering(self.backend, win, max_age=2, timeout=20)
             except Exception:
-                pass                # not fatal: a focused Qud is the common case anyway
+                pass                # not fatal: a rendering Qud is the common case anyway
         port = PROFILES.get("qud", {}).get("port", 48710)
         frame = {"type": "command", "name": name}
         # Extra fields ride ALONGSIDE name — the mod reads its arguments off the same flat
@@ -945,8 +967,24 @@ class Engine:
             return {"ok": False, "error": "no proc/launcher profile for app %r" % app}
         import os as _os
         if _os.name == "nt":
-            # taskkill matches the IMAGE NAME, not a command-line pattern —
-            # profiles carry the pkill -f stem, so append .exe (CoQ -> CoQ.exe).
+            # taskkill matches the IMAGE NAME, and a profile's `proc` stem is the MAC
+            # binary name. For qud that happens to match (CoQ.exe); for RAVES it does not
+            # — a dev-run Raves IS the Godot binary, so `/IM RavesOfQud.exe` matched
+            # nothing and "restart" quietly became "launch another one". That is how this
+            # box ended up with three live Raves, at which point the duplicate-instance
+            # guard (correctly) refused to drive anything.
+            #
+            # Kill by PID off the app's own WINDOWS instead. It gets duplicates, and it
+            # cannot take out an unrelated Godot editor the way an image-name kill would.
+            pids = set()
+            for t in b.list_targets():
+                d = t.to_dict()
+                if win and win in (d.get("title") or ""):
+                    if d.get("pid"):
+                        pids.add(d["pid"])
+            for pid in pids:
+                _sp.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+            # Belt and braces for a windowless corpse the enumeration cannot see.
             _sp.run(["taskkill", "/F", "/IM", proc + ".exe"], capture_output=True)
         else:
             _sp.run(["pkill", "-9", "-f", proc], capture_output=True)
@@ -993,8 +1031,25 @@ class Engine:
         # Kept because the postcondition is strictly better and costs ~0.7s, not
         # because it is a proven fix.
         reporting = self._await_report(app, launched_at)
+        # RESTORE THE STAGE. A relaunched app does not come back where it was -- a Godot
+        # dev-run Raves opens at the display default (4267x2400 here), which then reaches
+        # a capture as a 2400-tall PNG scored against a 1080-tall spec. The stage owns
+        # window geometry, so re-apply the layout rather than teach the app a size.
+        # Best-effort and after readiness: a window that exists can still be resized, but
+        # placing one mid-load has it move again when the app finishes settling.
+        relaid = None
+        try:
+            from .layouts import last_layout
+            _lay = last_layout()
+            if _lay:
+                _r = self._apply_layout(b, _lay)
+                relaid = {"layout": _lay, "applied": _r.get("applied"),
+                          "ok": bool(_r.get("ok"))}
+        except Exception as e:
+            relaid = {"error": str(e)}
         return {"ok": True, "launched": spec, "window": win,
                 "reporting": reporting,
+                "relaid": relaid,
                 "error": None if reporting
                          else "window up but the app never reported a scene; "
                               "driving it now would steer by the previous process"}
@@ -1025,6 +1080,75 @@ class Engine:
         return False
 
     # ------------------------------------------------------- load save BY NAME
+    # The modal `loadsave` is allowed to answer, and the only one. Matched on the popup's own
+    # text, and the option picked by ITS text -- both halves matter. Qud's pre-selected option
+    # is "Restart using save game's mod configuration", i.e. relaunch with OUR BRIDGE OFF, and
+    # that is what a blind default-press or a hardcoded index lands on when the modal is not
+    # the one we assumed. It cost a debugging round on Lumpy already (bridge port shut,
+    # heartbeat frozen, ModSettings.json flipped to Enabled:false).
+    _MODCFG_MATCH = "mod configuration"
+    _MODCFG_CHOOSE = "keeping current"
+
+    def _answer_mod_config_popup(self, port):
+        """Look at the live Qud modal; answer it ONLY if it is "Mod Configuration Differs".
+
+        -> {answered: bool, chose?: str, saw?: str, error?: str}
+
+        The mod re-publishes the active popup to every joining client, so connecting IS the
+        read: no extra command, no guessing from the scene name.
+        """
+        import json as _json
+        import socket as _socket
+        import struct as _struct
+        import time as _t
+        try:
+            with _socket.create_connection(("127.0.0.1", port), timeout=3) as s:
+                buf = b""
+                frame = None
+                deadline = _t.time() + 1.2
+                while _t.time() < deadline and frame is None:
+                    s.settimeout(max(0.05, deadline - _t.time()))
+                    try:
+                        chunk = s.recv(65536)
+                    except (_socket.timeout, OSError):
+                        break
+                    if not chunk:
+                        break
+                    buf += chunk
+                    while len(buf) >= 4:
+                        n = _struct.unpack(">I", buf[:4])[0]
+                        if len(buf) < 4 + n:
+                            break
+                        body, buf = buf[4:4 + n], buf[4 + n:]
+                        try:
+                            f = _json.loads(body.decode("utf-8", "replace"))
+                        except ValueError:
+                            continue
+                        if f.get("type") == "popup" and f.get("active"):
+                            frame = f
+                            break
+                if frame is None:
+                    return {"answered": False}
+                text = ((frame.get("message") or "") + " " + (frame.get("title") or "")).lower()
+                opts = [o.get("text") or "" for o in frame.get("options") or []]
+                if self._MODCFG_MATCH not in text:
+                    return {"answered": False,
+                            "saw": (frame.get("message") or frame.get("title") or "?")[:120]}
+                idx = next((i for i, o in enumerate(opts)
+                            if self._MODCFG_CHOOSE in o.lower()), None)
+                if idx is None:
+                    # The right modal, but not the option we expect. Do NOT fall back to a
+                    # position -- Qud's own default here disables the mod.
+                    return {"answered": False, "saw": frame.get("message", "")[:120],
+                            "error": "Mod Configuration popup has no %r option; saw %s"
+                                     % (self._MODCFG_CHOOSE, opts)}
+                p = _json.dumps({"type": "command", "name": "popup",
+                                 "action": "option", "index": idx}).encode("utf-8")
+                s.sendall(_struct.pack(">I", len(p)) + p)
+                return {"answered": True, "chose": opts[idx]}
+        except OSError as e:
+            return {"answered": False, "error": "qud bridge: %s" % e}
+
     def _load_save(self, b, name):
         """Load a NAMED Qud save via the mod's `loadsave {id}` bridge command — exact
         ID match, no coordinate clicks, no focus stealing. (The old row-click drive
@@ -1060,12 +1184,56 @@ class Engine:
         except OSError as e:
             return {"ok": False, "error": "Qud bridge :%s unreachable (%s)" % (port, e)}
         deadline = _t.time() + 40
+        answered = None       # the option LABEL we pressed, once we have pressed one
+        unknown = None        # a modal we declined to answer, kept for the failure report
         while _t.time() < deadline:
             stq = (self._gamestate(b).get("states", {}).get("qud") or {})
             if stq.get("node") == "in_game":
-                return {"ok": True, "name": name, "id": sid, "via": "bridge loadsave"}
+                r = {"ok": True, "name": name, "id": sid, "via": "bridge loadsave"}
+                if answered:
+                    r["popup"] = "answered %r" % answered
+                return r
+            # "Mod Configuration Differs" — a save made without the bridge stops the load
+            # dead on a popup whose PRE-SELECTED option is "Restart using save game's mod
+            # configuration", i.e. relaunch with OUR BRIDGE DISABLED. Anything that blindly
+            # presses the default here silently loses the mod for every later run; that is
+            # not hypothetical, it happened on Lumpy and cost a debugging round (bridge
+            # port shut, heartbeat frozen, ModSettings.json flipped to Enabled:false).
+            #
+            # Answered by CONTENT and chosen by LABEL, never by a hardcoded index. The scene
+            # name is only the cheap trigger to go and look: Qud's heartbeat sets `scene` from
+            # the raw view name, so *every* Qud popup satisfies "popup" in it, and index 1 is a
+            # different button on a different modal. Pressing the wrong option on a modal
+            # during a load is not a cosmetic failure, and CLAUDE.md already says it: fire ONE
+            # answer and verify, never a fallback shotgun.
+            if not answered and "popup" in str(
+                    (stq.get("signals") or {}).get("scene") or "").lower():
+                got = self._answer_mod_config_popup(port)
+                if got.get("answered"):
+                    answered = got["chose"]
+                elif got.get("saw"):
+                    # A modal we do not recognise. Leave it alone and say what it was --
+                    # this path used to press index 1 and hope.
+                    unknown = got["saw"]
             _t.sleep(1.5)
-        return {"ok": False, "error": "load did not reach in_game", "name": name, "id": sid}
+        # A closed bridge here means the mod got switched off — say so, because the
+        # symptom (stale heartbeat, "no [raves] lines") points nowhere near the cause.
+        try:
+            with _socket.create_connection(("127.0.0.1", port), timeout=2):
+                pass
+            hint = ""
+        except OSError:
+            hint = (" — and the Qud bridge is CLOSED: the mod looks disabled. Check "
+                    "Local/ModSettings.json for RavesOfQudBridge.Enabled")
+        if unknown and not answered:
+            # Naming it is the whole value: the failure is "a modal we do not know is up",
+            # not "the load is slow", and the old code could not tell those apart because
+            # it answered whatever was there.
+            hint += (" — an unrecognised Qud modal is up and this path will not answer it: "
+                     "%r. Only \"Mod Configuration Differs\" is answerable here." % unknown)
+        return {"ok": False, "error": "load did not reach in_game" + hint,
+                "name": name, "id": sid, "popup_answered": answered,
+                "popup_declined": unknown}
 
     def _gamestate(self, b, ocr=False):
         """Evaluate the game state-machine tree against live signals for each app.
@@ -1133,6 +1301,84 @@ class Engine:
     # A report is trusted only while FRESH (mtime within STATE_FILE_TTL): a crashed app's
     # last write must not pin the tree to a stale screen.
     STATE_FILE_TTL = 6.0
+
+    def _settle_rendering(self, b, target, max_age=2.0, timeout=30.0):
+        """Wait until the target app is actually RENDERING, re-activating as needed.
+
+        A Unity app that is not rendering still screenshots -- it hands back its last
+        frame, and for Qud that frame is the playfield WITHOUT the UI overlay, so a
+        status-screen capture comes back looking like the plain map. The heartbeat is
+        not lying when this happens; it correctly reports the status screen. The
+        capture is the thing that is stale, which is why this survived so long: every
+        state check agreed with what we wanted while the PNG on disk did not.
+
+        `ui_age` is the tell, and it has to be read AT the capture, not around it.
+        Measured 2026-08-08: at ui_age 1 the file holds the real screen, at 5..23 it
+        holds a stale UI-less frame -- and runs that sampled ui_age before or after
+        the shot happily logged 1 while the shot itself was stale.
+
+        Re-activating matters as much as waiting: `activate` frequently does not take
+        when another window is contending (three attempts in a row measured before one
+        landed), so this retries it rather than trusting one call and sleeping.
+
+        Returns a dict merged into the shot response: whether it settled and the age
+        it settled at. Never raises and never blocks the capture -- a stale shot that
+        is LABELLED stale is still better than no shot, and the caller decides.
+        """
+        import os as _os
+        import time as _t
+        from . import gametree
+        try:
+            apps = gametree.apps(gametree.load_tree())
+        except Exception:
+            return {"live_checked": False, "live_reason": "no tree"}
+        # Match the target against each app's window name; the shot target is a window.
+        want = str(target or "").strip().lower()
+        cfg = None
+        for _name, _cfg in apps.items():
+            win = str(_cfg.get("window") or "").strip().lower()
+            if win and (win == want or win in want or want in win):
+                cfg = _cfg
+                break
+        path = (cfg or {}).get("state_file")
+        if not path:
+            return {"live_checked": False, "live_reason": "app authors no state file"}
+        p = _os.path.expanduser(path)
+
+        # READ THE PID'S OWN SIDECAR. The shared state file has one writer per running
+        # instance, so with duplicates a bare read is a coin flip -- which is the exact
+        # failure the per-process sidecars were added for, and this call was bypassing them.
+        # Only the ui_age is wrong when that happens, not the screen, but a wrong ui_age is
+        # what decides whether a capture is labelled live, so it is worth the lookup.
+        pid = None
+        try:
+            w = self._find_win(b.list_targets(), target)
+            pid = getattr(w, "pid", None) if w is not None else None
+        except Exception:
+            pid = None
+
+        deadline = _t.time() + timeout
+        last = None
+        tries = 0
+        while _t.time() < deadline:
+            d = self._read_state_file(p, pid)
+            age = (d or {}).get("ui_age")
+            if age is None:
+                return {"live_checked": False, "live_reason": "state file has no ui_age"}
+            last = age
+            if float(age) <= max_age:
+                return {"live_checked": True, "live": True,
+                        "ui_age": age, "live_tries": tries}
+            tries += 1
+            try:
+                b.activate(target)
+            except Exception:
+                pass
+            _t.sleep(1.2)
+        return {"live_checked": True, "live": False, "ui_age": last,
+                "live_tries": tries,
+                "live_reason": "ui_age stayed above %s for %ss -- this capture is "
+                               "probably a stale frame" % (max_age, timeout)}
 
     def _read_state_file(self, path, pid=None):
         """Parsed JSON dict of a fresh state file, else None.
@@ -1273,9 +1519,26 @@ class Engine:
                 return {"ok": True, "passed": True, "app": app, "want": want,
                         "elapsed": round(time.monotonic() - t0, 2), "actual": _slim_state(st)}
             if time.monotonic() - t0 >= timeout:
-                return {"ok": True, "passed": False, "app": app, "want": want,
-                        "elapsed": round(time.monotonic() - t0, 2), "actual": _slim_state(st),
-                        "error": "assert timed out"}
+                res = {"ok": True, "passed": False, "app": app, "want": want,
+                       "elapsed": round(time.monotonic() - t0, 2), "actual": _slim_state(st),
+                       "error": "assert timed out"}
+                # SURFACE ui_age. It was already in the payload — twenty lines down inside
+                # actual.extra — which is not where anyone looks when an assert fails, and
+                # that is not hypothetical: a stalled Qud uiQueue was misdiagnosed as a bad
+                # recipe TWICE on this branch in one day, the second time by the person who
+                # had written the gotcha that morning. A stale UI and a wrong recipe are
+                # indistinguishable from the destination state; only this number separates
+                # them, so it gets promoted to the top level and says what it means.
+                age = ((st or {}).get("extra") or {}).get("ui_age")
+                if age is not None:
+                    res["ui_age"] = age
+                    if isinstance(age, (int, float)) and age > 10:
+                        res["error"] = (
+                            "assert timed out — but the app's UI is STALE (ui_age %s). Its "
+                            "queue has stopped draining, so mod-driven steps no-op silently "
+                            "and the state never moves. Restart the app before suspecting "
+                            "the recipe." % age)
+                return res
             time.sleep(interval)
 
     def _assert_holds(self, want, st):
@@ -1631,6 +1894,9 @@ class Engine:
           {"restart": app}                kill all instances, relaunch, wait for the report
           {"wait_window": label, "timeout": s}       poll for the window
           {"activate": label}             front the window
+          {"hover": [x,y], "window": label}          move the cursor ONLY, no buttons —
+                                                     for UIs where hovering selects and
+                                                     clicking confirms (Qud's chargen)
           {"click_hover": [x,y], "window": label}    hover-click (menus need the hover)
           {"click": [x,y], "window": label}          plain click
           {"click_text": "label", "window": label}   OCR-locate the text, hover-click its
@@ -1799,8 +2065,26 @@ class Engine:
         the conditional dismiss that verifies what it pressed, the first-party bridge exit
         for Qud's modern menus — carries over unchanged.
         """
+        import os as _os
         import time
         from . import gametree
+
+        # PER-OS STEPS. The same screen sometimes has to be reached differently on each
+        # platform, and the two ways are not a disagreement to settle -- they are both
+        # right, on their own machine. The 2026-08-08 merge produced seven of these at
+        # once: `click_text` needs OCR, which only `backends/darwin.py` implements, so on
+        # Windows those edges died with `ocr failed:` and took the chargen subtree with
+        # them. Overwriting them with coordinates would have re-imported the failure the
+        # Mac's "click by LABEL, not coords" rule exists to prevent (stray games, twice).
+        #
+        # So an edge may carry BOTH forms, each tagged with the `os.name` it belongs to,
+        # and each machine skips the other's. `tools/selftest_plan.py` then enforces the
+        # thing that makes this safe: an edge must keep at least one ACTUATING step under
+        # every os, because a step list that skips itself empty is an edge that reports
+        # OK while doing nothing -- the failure family this codebase keeps rediscovering.
+        if "os" in step and step["os"] != _os.name:
+            return {"ok": True, "detail": "skipped (os=%s, here=%s)" % (step["os"], _os.name)}
+
         try:
             if "goto" in step:
                 # A LEGACY-RECIPE step: run another node's recipe as a prefix. The graph
@@ -1858,6 +2142,22 @@ class Engine:
                 r = b.activate(win.id)
                 time.sleep(0.6)
                 return _step_ok(r.ok, None, r.error or "activate failed")
+
+            if "hover" in step:
+                # A hover is NOT a weak click. Qud's chargen carousel selects the card
+                # under the cursor and confirms the current selection on a click that
+                # lands anywhere else, so "put the cursor on card B" and "press it" are
+                # separate verbs; an edge with only clicks cannot say the first, and
+                # ends up confirming whatever happened to be selected.
+                win = self._find_win(b.list_targets(), step.get("window", ""))
+                if win is None:
+                    return {"ok": False, "error": "no window %r" % step.get("window")}
+                x, y = step["hover"]
+                r = b.mouse_move(win.id, int(x), int(y))
+                if not r.ok:
+                    return {"ok": False, "error": r.error or "hover failed"}
+                time.sleep(0.35)
+                return {"ok": True}
 
             if "click_hover" in step or "click" in step:
                 key = "click_hover" if "click_hover" in step else "click"
@@ -2237,6 +2537,11 @@ class Engine:
                             "title": win.title, "ok": r.ok,
                             "rect": [x, y, w, h], "error": r.error})
         applied = sum(1 for x in results if x["ok"])
+        if applied > 0:
+            # Remember it as the standing stage, so a restart can put the windows back
+            # without anyone having to remember to re-run this by hand.
+            from .layouts import remember_layout
+            remember_layout(name)
         return {"ok": applied > 0, "applied": applied, "results": results,
                 "detail": "%s: %d/%d placed" % (name, applied, len(results))}
 

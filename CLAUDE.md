@@ -189,6 +189,13 @@ label}` (Unity menus need hover), `{"click_text": label, "window": label}`, `{"k
 `{"dismiss": {...}}`, `{"sleep": s}`, `{"assert": {...}}`. Coordinates are window points at
 the standard 1920×1080 slots; re-measure if the layout changes.
 
+Any step may carry **`{"os": "posix"|"nt"}`** and is SKIPPED where it does not match
+`os.name`. That is the seam for a screen the two platforms genuinely have to reach
+differently (`click_text` needs OCR, which only the darwin backend has) — both forms live on
+the one edge and neither machine's evidence is thrown away. `selftest_plan.py` enforces the
+rule that makes it safe: an edge must keep at least one ACTUATING step under *every* os, or
+it is an edge that skips itself empty and reports ok.
+
 - `hv plan <app> <node> [--from <state>]` — the route `hv goto` would take, driving NOTHING.
   With NO node it lists every reachable state and its cost (one call, not one per node).
 - **`hv test [id] [--node N]`** — run a check REGISTERED IN THE TREE, or list them all. The
@@ -240,6 +247,32 @@ that way. Guarded by `tools/selftest_evaluate.py`.
 
 - `hv move` verifies by READBACK (CG window frame) — raw AX error codes lie for Godot's
   borderless window (kAXErrorFailure from sets that landed, and vice versa).
+- **A click's `detail` echoes the button you ASKED for, not the events sent** — it is built from
+  the request (`"%s click @ …" % button`), so `hv click --middle` prints `"middle click"` even
+  when the running daemon is old enough to map it to left. It is not evidence the daemon has
+  your backend change. Verify with a BEHAVIOUR only the new code produces (for `--middle`: does
+  Raves' Map Editor context menu actually open?), never with the echoed field.
+- **(Windows) `hv text` does not work on Godot** — it types into an editable element found through the
+  accessibility layer, and Godot publishes none, so a Raves `LineEdit` fails with `no editable
+  element found in target`. Type with **`hv key <target> <string>`** instead: an unnamed
+  multi-char string falls through to `uiautomation.SendKeys`, which reaches the focused control
+  whatever the toolkit. (Click the field first — SendKeys goes to focus, not to a target.)
+- **(Windows) `hv key` modifiers are SendKeys syntax: `{Ctrl}a`, not `ctrl+a`.** The `+` form isn't
+  rejected, it's TYPED — `hv key win ctrl+a` puts the six characters "ctrl+a" in the field, which
+  looks like a silently ignored hotkey. Verified on a Raves `LineEdit`: "abcdef" → `{Ctrl}a` →
+  `Z` leaves "Z". (Not WSH's `^a` either; uiautomation uses the braced form.) Single named keys
+  are separate and case-insensitive — `hv key win escape` goes out as a real scan-code VK.
+  (Both of these are facts about `uiautomation.SendKeys`, which is a Windows API the
+  darwin backend does not use — they do not describe the Mac path.)
+- **A SINGLE printable char is delivered differently depending on the destination, and it has to
+  be.** To a top-level window (Godot/Unity, which expose no editable child) it goes as a VK
+  keydown/keyup: the app translates the key itself and gets BOTH a `keycode` and the character.
+  To a real EDIT child it goes as `WM_CHAR`, which is the only thing that inserts text there.
+  Do **not** "fix" this by sending the full WM_KEYDOWN→WM_CHAR→WM_KEYUP sequence a real keystroke
+  produces — measured on Raves, that types every character TWICE ("base" → "bbaassee"), because
+  Godot already makes text out of the keydown. Until 2026-08-08 single chars were WM_CHAR-only
+  everywhere, so `hv key win r` typed an "r" but could never fire an `event.keycode == KEY_R`
+  binding — and still reported ok.
 - A `[Errno 49] Can't assign requested address` from any hv call is TRANSIENT — just retry.
 - Qud's window FREEZES when unfocused (Unity doesn't repaint) — `hv activate` + ~2s before a
   shot, or you'll diff a stale frame. The mod/bridge still runs unfocused; only pixels freeze.
@@ -248,9 +281,20 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   HID-sourced or not. Exit them with the mod's first-party `uiback` bridge command
   (gametree `{"bridge": "uiback"}` step / `{"dismiss": {..., "bridge": "uiback"}}`),
   never key injection. Clicks DO land (warp + HID button pair).
+- **Qud's CHARGEN screens ignore the mod's own push APIs too, and that is the deeper
+  version of the rule above.** `Keyboard.PushCommand`/`PushMouseEvent` feed the LEGACY
+  console queue; the chargen module windows are modern `Qud.UI` windows that do not read
+  it. Every tag form through either carrier moved exactly **0 pixels** — and zero every
+  time with never a near-miss is the signature of a queue nobody reads, not of a wrong
+  tag. Drive them with `{"bridge": "choose", "args": {"label": "Classic"}}`, which calls
+  the window's own `GetSelections()` + selection handler in the mod (`UiDriver`). It
+  matches by label, so it cannot land on the wrong card the way a coordinate can. The
+  mod's `reflect` command dumps any live window's methods when a new screen needs one.
 - Menu recipes click by LABEL, not coords: `{"click_text": "Records", "window": ...}` —
   fixed coords started stray games twice when the menu reflowed / the window sat
-  off-slot. OCR matching is space-insensitive (Vision reads 'Opti ons' on Raves'
+  off-slot. On Windows there is no OCR backend, so those edges carry the
+  coordinate form beside the label one under `{"os": "nt"}` — add to the seam,
+  do not overwrite the label. OCR matching is space-insensitive (Vision reads 'Opti ons' on Raves'
   Source Code Pro); optional `"offset": [dx,dy]` when the hit-area sits away from
   the caption (Qud Records' Back chevron is 40px above its "[Esc] Back" label).
 - A dismiss step FAILS the recipe if the affordance is missing or the scene doesn't

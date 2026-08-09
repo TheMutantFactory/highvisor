@@ -734,3 +734,285 @@ merge):**
 **Verifiable here in principle, but not yet possible:** the Map Editor per-object context menu — it
 is hung off the middle button, and the Mac backend cannot produce one (§3.1). It becomes Mac-testable
 after Stage H item 2, and not before. Do not record it as failing in the meantime; it is untested.
+
+---
+
+# EXECUTION LOG — 2026-08-08, this machine
+
+Re-surveyed at execution time as §0 requires, and the survey had moved: **16 changed edges,
+not 11**, plus a chargen subtree (2 nodes, 9 edges, 3 detectors) that did not exist when the
+plan was written. Both repos still merged with zero textual conflicts.
+
+## Done and gated
+
+| stage | result |
+|---|---|
+| 0 re-survey | clean merge both repos; author guard clean; edge set re-diffed from scratch |
+| A branches | `dd/mac-pc-merge-0808` off `main` in both repos |
+| B highvisor | merged + resolved (below). **Gate B vs B4: selftests 4/4** |
+| C raves | merged. **Gate C vs B3: typing audit 14→15 (the predicted field), Godot check-only clean vs main, dotnet 0 errors / 18 CS0618** |
+| D SPOT | **5/5** — state_graph_render and `--quit-after 120` both clean, apps down |
+| E deploy | mod deployed (0 MODERROR, bridge 48710 up), Raves rebuilt, `title_bg.json` deleted, daemon confirmed by behaviour (`[live ui_age=…]` on BOTH apps — the Raves half only works because the rebuild landed first) |
+
+**Resolutions taken, differing from the plan where the plan was wrong:**
+
+1. **A per-OS seam was built now, not deferred to Stage H.** The plan budgeted 3 edges for it;
+   the re-survey found 7, spanning both apps, including `qud title -> new_game` (coordinates on
+   the edge that starts games — precisely what the click-by-label rule exists to prevent). Steps
+   now take `{"os": "posix"|"nt"}`. `selftest_plan` enforces that every seamed edge keeps an
+   ACTUATING step under every os; all three ways to break that were made to fail before the fix
+   was accepted.
+2. **The 7 letter-key status edges were NOT reverted — they were seamed too.** Reverting would
+   have deleted Lumpy's only working path. Mac keeps the letter keys (21/21, and the bindings
+   are provably there at `MainFrame.gd:282`), Windows keeps F2+tab-click, and the note asks for
+   a retest now the VK/scancode fix has landed.
+3. **The plan's "keep the PC's `{focus: true}` improvement" was a no-op** — `_run_step`'s key
+   branch already passes `focus=True` unconditionally, so the flag was never read. Dropped.
+4. `loadsave`'s popup answer re-expressed by CONTENT + option LABEL, with a fake-bridge test
+   (11 cases) covering the reordered-options case the old index-1 code got exactly wrong.
+5. `hv click --middle` implemented in `darwin.py` rather than documented as broken.
+
+## Stage F — PASSED. And the blocker was not what it looked like
+
+`hv activate` **silently did nothing.** `NSRunningApplication.activateWithOptions_` returns YES
+and no longer moves focus on macOS 26 (Darwin 25.5) unless the caller is itself frontmost —
+cooperative activation. Three `hv activate CavesOfQud` in a row each reported `ok` while the
+frontmost app never changed. Every click-driven Qud edge was posting into an unfocused window;
+Unity still delivers mouseMoved, so the *hover tooltip appeared on the right icon* while the
+button did nothing, which reads exactly like a coordinate bug and is not one.
+
+Fixed: activate prefers `activateFromApplication_options_` and then **polls who is actually
+frontmost**, failing the step if focus did not land. The API's return value is not evidence —
+that was the entire defect. Verified: `activated (frontmost pid=…)`, and focus really moves.
+
+That exposed the next layer, which is still open:
+
+> **Raves takes focus back during the click.** Sequence measured: activate Qud → frontmost is
+> CavesOfQud → `hv click` → frontmost is **Raves of Qud**, and Qud never saw the button. So the
+> Qud toolbar edges still fail with both apps up.
+
+This is the two-window focus wall, not a merge regression. It has to be closed before Stage F
+can produce a number, because every status-screen capture depends on driving Qud by click.
+Next session starts here: find what raises Raves (the `window_rect.json` poll in `Settings.gd`
+re-places on a 0.5s timer and is the first suspect), then run F and G.
+
+**Nothing measured, nothing claimed:** no parity leaf was re-scored. B1/B2 remain unverified
+against the merge. Do not record the Equipment or item-popup scoreboards as holding.
+
+Also unresolved and now known:
+- `hv layout pair` does not exist on this machine (only loop/halves/quads), though `parity.py`'s
+  size-mismatch message tells you to run it. `hv layout loop` is a DESKTOP arrangement and
+  resizes Qud to 1793x997 — do not use it before a capture. `hv launch raves` is the pair start:
+  it spawns Qud **borderless** at 1920x1080, which is what the baselines were taken at.
+- `darwin.py` implements no `drag()` at all, so `hv drag` is Windows-only regardless of button.
+
+### Resolution of the blocker, and Stage F results
+
+**It was never focus. The two windows OVERLAPPED by 124px** and Qud's toolbar click at global
+y=-1130 landed inside the Raves window (-2156..-1076), so Raves got the click and came forward.
+`hv launch raves` had reported `anchor 'CavesOfQud' not found` — the auto-placer ran before Qud's
+window existed, so Qud was never placed. Stacking them cleanly (Raves 0,-2160 / Qud 0,-1080, both
+1920x1080) made `hv goto qud status_equipment` pass first try.
+
+**The strict activate check was walked back.** It was built on
+`NSWorkspace.frontmostApplication()`, and read from the daemon that disagrees with the
+CGWindowList z-order — measured, they gave different answers on three of three activations, and
+Finder was seen activating instantly while the same read still named the old app. A hard failure
+on an untrustworthy instrument broke `raves within(status_screens)->in_game`, a route that
+worked. Activation still prefers `activateFromApplication_options_` (a real improvement: the old
+`activateWithOptions_` is a no-op on macOS 26 from a non-frontmost caller) and now REPORTS
+`frontmost confirmed/unconfirmed` instead of failing the step.
+
+| gate | result |
+|---|---|
+| **F1 vs B1** (Equipment, 33 leaves) | **PASS — 33/33 within ±0.01, max \|delta\| 0.010, nothing outside the ~0.7 noise** |
+| **F2 vs B2** (item popup, 7 leaves) | **PASS — 7/7 at exactly +0.00** |
+
+**The §3.3 prediction was correct.** `filter_image[0..4]` moved **+0.00** in both capture runs, so
+the strip is 12 cells and the recentre is arithmetically a no-op on this fixture, exactly as the
+arithmetic said.
+
+**One thing worth keeping:** the FIRST capture run showed a uniform `+1.43` on all five
+`filter_frame` leaves and `+0.71` on all five `filter_cell` leaves, with `filter_image` flat. The
+second run reproduced B1 exactly. So that was a capture-time artefact, not code — but it means a
+SINGLE capture can mislead by ~1.4 on that leaf family, and the uniform-across-a-family signature
+is the tell that it is not geometry. Score twice before believing a small move.
+
+### Stage G — results
+
+| gate | baseline | result |
+|---|---|---|
+| **G1** raves Wander whole-tree tour | B5 (21/21) | **22/22 arrived, 0 EDGE, 0 ENV, 0 REFUSED**, 18.2 min. 22 not 21 because the chargen work added `caste`. All eight status edges arrived, so the seam holds on the Mac side. **RE-RUN — the first run's number was not evidence, see below.** |
+| **G2** `hv loadsave` (Stage B rewrote it) | B6 | PASS — `ok, via bridge loadsave`. The Mod-Configuration popup path did NOT fire here (this Mac's save matches the mod config); it is covered by the fake-bridge selftest and still wants an end-to-end run on Lumpy. Popup mirror+answer was exercised during F2: Qud raised the 8-option item menu, Raves mirrored it (`popup=menu`, `popup_n=2`), Cancel answered it. |
+| **G3** typing guard on the NEW field | B3 / FULL 1 | PASS — typed `e j q x n 1 2` into the Map Editor blueprint filter and **read `ejqxn12` back out of the pixels**. The scene never left `map_editor`, so both directions hold: the characters arrived AND no status hotkey fired. |
+
+Three nodes in G1 arrived while `hv goto` reported failure (`status_quests`, `caste`,
+`blueprint_browser`). Not a tour defect — arrival is decided by the tree's detectors, which is
+exactly why the script does not trust goto's verdict — but it means those edges' `verify` blocks
+disagree with the detector that finally resolves them. Worth a look; not a merge blocker.
+
+### Two more things the run exposed
+
+1. **`hv layout pair` did not exist**, though `parity.py`'s size-mismatch message tells you to run
+   it. Created from the verified capture geometry (Raves 0,-2160 / Qud 0,-1080, both 1920x1080,
+   no overlap) and trimmed to the two apps — `layout-save` grabs every window on screen, which
+   for a "pair" layout would shuffle the whole desktop. Applying it now reports 2/2.
+2. **The PC's layout restoration re-applies whatever layout was last used, on every restart.**
+   `hv loadsave` restarts Qud, which re-applied the `loop` desktop arrangement and put both
+   windows back to 1793x997 / 1842x991 mid-session. Good feature, real hazard: **a capture taken
+   after any restart can be silently off-geometry.** With `pair` now saved, the fix is to apply
+   it after a restart rather than to trust the remembered one.
+
+### Still open
+
+- **Stage H** items remain: the `os` seam is built, but `plat_mac.py` still lacks
+  `qud_install_dir()`, and `_settle_rendering`/`loadsave` still read the state file without a pid.
+- `darwin.py` implements no `drag()` at all — `hv drag` is Windows-only regardless of button.
+- Ask Lumpy: do the letter-key status edges work now the VK/scancode fix has landed (if so the
+  seam's `nt` half can go), and how does `apps.*.state_file` resolve on Windows.
+- The Classic tours (qud 28/28, raves 20/21) were NOT re-run — B5 is explicit that they are a
+  pre-release exercise, ~36 min of wall time, and G1 did not regress.
+
+### Correction: G1's first run could not have failed
+
+`hv assert` returns BOTH `ok` (the envelope: the op ran) and `passed` (the verdict).
+`tour.py` read `ok`, so **every node counted as arrived no matter what the assertion said** —
+a 22/22 that was guaranteed before the tour started. Reported to Daniel as a result before it
+was caught. Ninth instance of this family in this codebase, and this one was mine.
+
+Fixed: the tour reads `passed`, and now **exits** rather than guessing if the field is ever
+absent. Re-run from scratch: **22/22, 0 EDGE / 0 ENV / 0 REFUSED, 18.2 min** — the number was
+right, but only the second run is evidence for it. Two differences worth noting: no node
+printed `(goto said no)` this time (the three that did on the first run all drove cleanly), and
+`status_quests` went 39.2s -> 14.2s.
+
+**What the broken check had been hiding: `map_editor` had no `raves` detector at all.** Its
+`detect` block carried only a `qud` entry, so Raves — which publishes `scene=map_editor` — read
+as `running · unknown screen  via=window`, and any assert on that node timed out. Added, and it
+now resolves `Map Editor  scene=map_editor  via=scene`.
+
+### Stage H progress (Mac-side items; the rest need Lumpy)
+
+- **`qud_install_dir()` added to `plat_mac.py`** and `fonts.py`'s `getattr(plat, ...)` fallback
+  dropped — both backends define the name now. Verified end-to-end: the extractor carved 4
+  faces out of this Mac's own install through the unified call.
+- **`_settle_rendering` reads the pid's own sidecar.** It was calling `_read_state_file(p)`
+  with no pid, bypassing the per-process files that exist precisely because the shared one is a
+  coin flip under duplicate instances. `hv shot --live` still reports a real `ui_age` on both
+  apps after the change.
+- Still open: `loadsave`'s own pid-less read, `qud_install_dir()` on the Windows Steam path if
+  Lumpy's install differs, and everything gated on Lumpy's answers.
+# LUMPY'S ANSWERS — 2026-08-08, the PC
+
+Answering the three "Ask Lumpy" items at the end of the execution log. Measured on this box against
+the merged tree (`origin/main` merged into `dd/pc-lumpy-merge`, both repos, clean, selftests green).
+
+## Q1. "Do the letter-key status edges work now the VK/scancode fix has landed — if so the seam's `nt` half can go?"
+
+**No, and the seam must stay — but every part of the premise turns out to be wrong, including my own
+note in the tree.**
+
+Measured with both apps in-game, Raves in 1:1, from a clean baseline each time:
+
+| key | result |
+|---|---|
+| `f2` | **opens the status overlay** (both delivery paths) |
+| `k` `x` `e` `n` `q` | nothing, via PostMessage **and** via `--focus` |
+| `j` | **raises a PopupMessage in QUD** |
+
+That last row is the answer. The letters are **not** being dropped — `j` reached Qud and fired Qud's
+own binding. **In 1:1 mode Raves FORWARDS letters to Qud**, so they never reach `MainFrame`'s
+handler. This is a routing decision in the app, identical on both platforms, and therefore **not an
+`nt` seam at all**. The F2 + tab-click form is the correct edge on macOS too.
+
+**My note on those eight edges is now STALE and I have corrected it.** It says Raves "does not
+implement Qud's per-screen letter bindings (e/k/x/n/j/q)". It does now — `MainFrame.STATUS_TAB_KEYS`
+maps `k/x/e/n/j/q` plus Tab and I. The bindings exist and are simply unreachable while 1:1 forwards
+the key to Qud first.
+
+Mechanism for the non-focus path, for the record: `windows.py::key` posts a real VK for anything in
+its `VK` table, but a **single printable character goes out as `WM_CHAR`** — a text message carrying
+no virtual-key — so a Godot handler testing `event.keycode` cannot match it. That alone would explain
+F2-works/letters-don't; the `j` result shows it is not the whole story, and the routing is.
+
+## Q2. "How does `apps.*.state_file` resolve on Windows?"
+
+**Verbatim, and it works.** Both entries are literal macOS-shaped paths
+(`~/Library/Application Support/RavesOfQud/{qud,raves}_state.json`). On Windows `expanduser("~")` is
+`C:\Users\danie`, and **both apps really do write to `%USERPROFILE%\Library\Application Support\
+RavesOfQud\`** — the mod's `StartupHook` heartbeat and Raves' `UiState` both build that path rather
+than using `%APPDATA%`. Confirmed live: both files exist and are fresh, and `hv state` resolves
+`via=scene` for both apps on this box. **No seam needed, and none should be added** — the two
+platforms genuinely share one path here.
+
+## Q3. `qud_install_dir()` on the Windows Steam path
+
+Lumpy's install is `C:\Program Files (x86)\Steam\steamapps\common\Caves of Qud\CoQ.exe`, i.e. the
+standard Steam layout with the same `steamapps/common/Caves of Qud` tail the Mac uses under a
+different root. Managed DLLs at `<install>\CoQ_Data\Managed`, game data at
+`<install>\CoQ_Data\StreamingAssets\Base`. Note the shape differs from macOS, where both sit inside
+`CoQ.app/Contents/Resources/Data` — so `plat_win.py`'s implementation cannot be the Mac's with a
+different prefix.
+
+## Not answered
+
+`hv drag` / middle-button on darwin, and `loadsave`'s pid-less state read, are Mac-side or shared
+items I have not touched.
+
+---
+
+# SECOND MERGE — Lumpy's answers + chargen carousel, 2026-08-08 (Mac)
+
+`origin/dd/pc-lumpy-merge` merged again into `dd/mac-pc-merge-0808`, both repos. This time there
+were REAL conflicts (the first pass had none): 9 in highvisor's gametree, 5 files in raves.
+
+**A defect in my own first merge, found here.** The raves merge commit `ca4224d` had ONE parent —
+`git stash`, run mid-merge to diff the typing-guard inventory, cleared `MERGE_HEAD`, so the commit
+captured the merged CONTENT with no second parent and git believed 71 of their commits were
+unmerged. Content was verified complete before re-merging (20 files theirs, 21 mine-only, 5 truly
+merged, none missing). Fixed by merging again properly.
+
+## Resolutions
+
+| conflict | taken | why |
+|---|---|---|
+| 7 status-tab notes | **theirs** | their measured explanation replaces my inference |
+| `qud title->game_mode` | **theirs** | `bridge: pick` beats coordinates AND OCR |
+| `fonts.py` | **mine** | the `getattr` fallback is dead once both backends define `qud_install_dir` |
+| `CasteScreen` / `ChargenCardScreen` | **theirs** | mine were byte-identical to their older copies |
+| `MapEditorScreen.gd` | **rebuilt** | their file + the macOS Ctrl+left un-convert re-applied as a patch, so neither side is guessed |
+| both CLAUDE.md gotchas, both doc sections | **both** | additive |
+
+## The letter-key question, settled by measuring HERE
+
+Lumpy's conclusion was right; their reason was not. Measured on macOS, same cell, Raves in 1:1:
+**the letter key `k` opens Skills, AND F2 + tab-click opens Skills.** So 1:1's letter-forwarding is
+NOT "identical on both platforms" — the letters reach `MainFrame` here. The reason to keep one form
+is simply that F2 + tab-click works on both and the letters work on one. Seam removed from all seven
+status edges; the note now carries both machines' measurements.
+
+`bridge: pick` verified on macOS too, so `qud title->new_game` was converted as well. **The os seam
+is now five Raves edges** — all the genuine OCR-vs-coordinates case.
+
+## Gates
+
+| gate | result |
+|---|---|
+| selftests | **4/4** (`cli` sees 49 subcommands — `hv bridge` landed) |
+| SPOT | **5/5** — typing audit, Godot parse, dotnet 0 errors, state-graph render, `--quit-after` |
+| `bridge: pick` on macOS | **works** — drives Qud's title; both converted edges arrive |
+| Map Editor | **works** — ctrl+click paints, middle-click opens the 5-row per-object menu |
+| **B1 Equipment** | **33/33 within ±0.02** (first capture showed the documented uniform +1.43 artefact again; second reproduced — the score-twice rule earning itself) |
+| **B2 item popup** | **7/7 at exactly +0.00** |
+| raves tour | **22/22, 0 EDGE / 0 ENV / 0 REFUSED** — with the collapsed seam |
+| qud tour | **30/31, 1 EDGE** — `title->modding_toolkit` flaked once; the same route then passed twice on retry, and `modding_toolkit` plus the three screens behind it arrived in the same run. Known-flaky coordinate double-click, not a break. |
+
+## Open
+
+- `qud title->modding_toolkit` is a coordinate double-click whose own note says the first click may
+  be eaten by activation. It is the one flaky edge left; `bridge: pick` is the obvious cure and
+  Lumpy owns that command.
+- A pre-existing startup `NullReferenceException` in `Bridge.EnsureScanlineState` (from 2026-07-30,
+  already on main) fires from inside `ThreadTaskQueue.queueTask`. In the one session where it fired,
+  Qud's UI sampler also stalled and the title read `unknown`; in a clean restart neither happened.
+  Correlated at n=1 each — not proven cause and effect. A sampler watchdog now re-arms and logs.

@@ -455,6 +455,28 @@ class MacBackend(PlatformBackend):
     def click(self, target: str, x: int, y: int, button: str = "left",
               double: bool = False, hover: bool = False,
               modifiers: str = "") -> ActionResult:
+        # THREE buttons, and the middle one is not optional decoration: Raves' Map Editor
+        # hangs its per-object context menu off MIDDLE click, deliberately, because Qud's
+        # own OnClick dispatches an unhandled `MiddleTile:x,y`. The CLI grew `--middle` with
+        # the Windows backend only; this reduced `button` to `right == "right"`, so a middle
+        # click here silently went out as a LEFT click — and the response `detail` echoes the
+        # button you ASKED for, so the CLI printed "middle click" either way. Unreachable
+        # feature plus invisible failure; parameterise all three instead.
+        BUTTONS = {
+            "left":   (Quartz.kCGMouseButtonLeft,   Quartz.kCGEventLeftMouseDown,
+                       Quartz.kCGEventLeftMouseUp),
+            "right":  (Quartz.kCGMouseButtonRight,  Quartz.kCGEventRightMouseDown,
+                       Quartz.kCGEventRightMouseUp),
+            # "Other" is Quartz's name for everything past the first two; the button NUMBER
+            # (Center == 2) is what distinguishes them, and CGEventCreateMouseEvent writes it
+            # into the event from this constant.
+            "middle": (Quartz.kCGMouseButtonCenter, Quartz.kCGEventOtherMouseDown,
+                       Quartz.kCGEventOtherMouseUp),
+        }
+        if button not in BUTTONS:
+            return ActionResult.fail("unknown mouse button %r (left|right|middle)" % button)
+        b, down, up = BUTTONS[button]
+
         w = self._resolve(target)
         if w is None:
             return ActionResult.fail("click needs a window target")
@@ -465,10 +487,6 @@ class MacBackend(PlatformBackend):
         time.sleep(0.06)
         src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
         pt = Quartz.CGPointMake(gx, gy)
-        right = button == "right"
-        b = Quartz.kCGMouseButtonRight if right else Quartz.kCGMouseButtonLeft
-        down = Quartz.kCGEventRightMouseDown if right else Quartz.kCGEventLeftMouseDown
-        up = Quartz.kCGEventRightMouseUp if right else Quartz.kCGEventLeftMouseUp
         # WARP the real OS cursor to the point so hover/position is correct (Unity
         # reads the actual cursor). Then post down/up exactly like a known-good
         # auto-clicker (othyn/macos-auto-clicker): HID source, HID tap, no click-state
@@ -683,10 +701,50 @@ class MacBackend(PlatformBackend):
         app = self._running(int(w["kCGWindowOwnerPID"]))
         if app is None:
             return ActionResult.fail("no running application for target")
-        # NSApplicationActivateAllWindows(1) | IgnoringOtherApps(2). The latter is
-        # deprecated on macOS 14 but still the reliable "bring me forward" nudge.
-        ok = bool(app.activateWithOptions_(1 | 2))
-        return ActionResult(ok=ok, tier=4, detail="NSRunningApplication.activate")
+        # COOPERATIVE ACTIVATION (macOS 14+, and by 26 it is the only thing that works).
+        # `activateWithOptions_` returns YES and does NOTHING when the caller is not itself
+        # frontmost -- the system now requires the activation to be handed over BY a running
+        # app rather than seized. Measured 2026-08-08 on Darwin 25.5: three `hv activate
+        # CavesOfQud` in a row each reported ok while the frontmost app stayed put, so every
+        # click-driven edge posted its click into an unfocused window. Unity still delivers
+        # mouseMoved (the tooltip appeared, which is what made this look like a coordinate
+        # problem for half an hour) but ignores the button, so the edges failed with the
+        # pointer provably on target.
+        me = NSRunningApplication.currentApplication()
+        want = int(w["kCGWindowOwnerPID"])
+
+        for attempt in range(2):
+            if hasattr(app, "activateFromApplication_options_"):
+                # 1|2 == ActivateAllWindows | ActivateIgnoringOtherApps
+                app.activateFromApplication_options_(me, 1 | 2)
+            else:
+                app.activateWithOptions_(1 | 2)          # pre-14 fallback
+            deadline = time.time() + 0.8
+            landed = False
+            while time.time() < deadline:
+                front = NSWorkspace.sharedWorkspace().frontmostApplication()
+                if front is not None and int(front.processIdentifier()) == want:
+                    landed = True
+                    break
+                time.sleep(0.05)
+            if landed:
+                break
+
+        # REPORTED, NOT ENFORCED, and the reason is that the instrument is not trustworthy
+        # enough to fail a step on. `NSWorkspace.frontmostApplication()` read from the daemon
+        # (no AppKit run loop) disagrees with the CGWindowList z-order -- measured 2026-08-08,
+        # the two gave different answers on all three of three activations, and Finder was
+        # observed activating instantly while the same read still named the old app. A hard
+        # failure built on that turns working routes into broken ones, which is exactly what
+        # it did to `raves within(status_screens)->in_game` before this was walked back.
+        #
+        # So: say what was observed and let the step's own verify decide. What actually
+        # bit here was never activation at all -- it was the two windows OVERLAPPING, so
+        # Qud's toolbar click landed inside the Raves window (measured: 124px of overlap,
+        # click at global y=-1130 inside Raves' -2156..-1076). Focus was the wrong suspect.
+        return ActionResult(ok=True, tier=4,
+                            detail="activated (frontmost %s)"
+                                   % ("confirmed" if landed else "unconfirmed"))
 
     def move(self, target: str, x: int, y: int, w: int, h: int,
              topmost: Optional[bool] = None) -> ActionResult:

@@ -116,3 +116,41 @@ def placement_rect(pl: dict, sw: int, sh: int, displays=None):
     if "rect" in pl:
         return tuple(int(v) for v in pl["rect"])
     raise ValueError("placement needs one of: monitor, zone, frac, rect")
+
+
+# --------------------------------------------------------- the standing layout
+# WHY THIS EXISTS. A relaunched app does not come back where it was: a Godot
+# dev-run Raves opens at the display's default (4267x2400 on the Lumpy stage),
+# and anything that restores a minimised window can bring that size back. The
+# stage owns window geometry -- that is the settled policy, and it is why the
+# launchers pass no -screen-width/-height -- so the fix is to REAPPLY the stage,
+# not to teach each app its own size.
+#
+# Left unclosed, this silently corrupts parity work: a 2400-tall capture scored
+# against a 1080-tall spec. The guards downstream now refuse that, but refusing
+# is not the same as not happening, and re-running `hv layout pair` by hand after
+# every restart is exactly the kind of step that gets forgotten at 1am.
+
+def _last_path() -> str:
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "highvisor", "last_layout.json")
+
+
+def remember_layout(name: str) -> None:
+    """Record the layout most recently applied on this machine. Best-effort."""
+    try:
+        os.makedirs(os.path.dirname(_last_path()), exist_ok=True)
+        with open(_last_path(), "w") as f:
+            json.dump({"name": name}, f)
+    except OSError:
+        pass
+
+
+def last_layout():
+    """The layout name last applied here, or None. Only names that still exist."""
+    try:
+        with open(_last_path()) as f:
+            name = (json.load(f) or {}).get("name")
+    except (OSError, ValueError):
+        return None
+    return name if name in load_layouts() else None

@@ -9,7 +9,7 @@ other language could reimplement this in a few lines (that's the point).
     hv shot <target> [out.png] [--native]
     hv text <target> <string...>
     hv key <target> <keys> [--focus]
-    hv click <target> <x> <y> [--right] [--double]
+    hv click <target> <x> <y> [--right|--middle] [--double]
     hv activate <target>
     hv inspect <target> [depth]
     hv move <target> <zone | x y w h> [--topmost | --no-topmost]
@@ -100,7 +100,10 @@ def _cmd_ls(a):
 
 
 def _cmd_shot(a):
-    resp = _call({"op": P.OP_SHOT, "target": a.target, "native": a.native})
+    resp = _call({"op": P.OP_SHOT, "target": a.target, "native": a.native,
+                  "live": getattr(a, "live", False),
+                  "live_age": getattr(a, "live_age", None),
+                  "live_timeout": getattr(a, "live_timeout", None)})
     if not resp.get("ok"):
         _print_json(resp)
         return 1
@@ -115,7 +118,20 @@ def _cmd_shot(a):
         # read off the PNG must be halved before you click it (see the
         # click-coordinate note in the ops quickref).
         dims = " %dx%d px%s" % (w, h, " (native/backing)" if a.native else "")
-    print("wrote %s (%d bytes)%s" % (out, resp.get("bytes", 0), dims))
+    live = ""
+    if resp.get("live_checked"):
+        live = "  [live ui_age=%s%s]" % (
+            resp.get("ui_age"),
+            "" if resp.get("live_tries") in (0, None) else ", %d activate(s)" % resp["live_tries"])
+    elif getattr(a, "live", False) and resp.get("live_reason"):
+        live = "  [--live skipped: %s]" % resp["live_reason"]
+    print("wrote %s (%d bytes)%s%s" % (out, resp.get("bytes", 0), dims, live))
+    # A capture the app was not rendering is worse than no capture, because it looks
+    # fine: Qud hands back its last frame, which for a status screen is the bare
+    # playfield. Write it anyway so it can be inspected, but fail so a script stops.
+    if resp.get("live_checked") and not resp.get("live"):
+        sys.stderr.write("STALE CAPTURE: %s\n" % resp.get("live_reason", "app not rendering"))
+        return 1
 
 
 def _cmd_text(a):
@@ -128,9 +144,16 @@ def _cmd_key(a):
                        "focus": a.focus}))
 
 
+def _button(a):
+    """--right/--middle pick the button; left is the default."""
+    if getattr(a, "middle", False):
+        return "middle"
+    return "right" if a.right else "left"
+
+
 def _cmd_click(a):
     _print_json(_call({"op": P.OP_CLICK, "target": a.target, "x": a.x, "y": a.y,
-                       "button": "right" if a.right else "left", "double": a.double,
+                       "button": _button(a), "double": a.double,
                        "hover": a.hover, "modifiers": a.mod}))
 
 
@@ -142,7 +165,7 @@ def _cmd_mouse(a):
 def _cmd_drag(a):
     _print_json(_call({"op": P.OP_DRAG, "target": a.target,
                        "x1": a.x1, "y1": a.y1, "x2": a.x2, "y2": a.y2,
-                       "button": "right" if a.right else "left",
+                       "button": _button(a),
                        "steps": a.steps, "modifiers": a.mod, "hold": a.hold}))
 
 
@@ -283,6 +306,26 @@ def _cmd_scroll(a):
     """Wheel event at a window point, e.g. `hv scroll raves 960 540 --dy 1 --mod ctrl`."""
     res = _call({"op": P.OP_SCROLL, "target": a.target, "x": a.x, "y": a.y,
                  "dy": a.dy, "dx": a.dx, "modifiers": a.mod or ""})
+    _print_json(res)
+    raise SystemExit(0 if res.get("ok") else 1)
+
+
+def _cmd_bridge(a):
+    """Send any first-party mod command. `hv bridge pick label='New Game'`.
+
+    Args are key=value so a one-off command can be exercised without inventing a
+    protocol op for it — which is what blocked `pick` the moment it was deployed:
+    reaching it meant a fourth bespoke op or a gametree edge built around a
+    command nobody had yet run once.
+    """
+    args = {}
+    for kv in a.args:
+        k, _, v = kv.partition("=")
+        if not _:
+            print("args must be key=value, got %r" % kv)
+            raise SystemExit(2)
+        args[k] = v
+    res = _call({"op": P.OP_QUDBRIDGE, "name": a.name, "args": args})
     _print_json(res)
     raise SystemExit(0 if res.get("ok") else 1)
 
@@ -948,6 +991,17 @@ def build_parser():
     s.add_argument("--native", action="store_true",
                    help="capture via ScreenCaptureKit at true backing scale "
                         "(2x on a Retina display); non-deprecated engine")
+    s.add_argument("--live", action="store_true",
+                   help="wait until the app is actually RENDERING before capturing, "
+                        "re-activating it as needed (polls the app's ui_age). A Unity "
+                        "app that is not rendering still screenshots -- it returns its "
+                        "last frame, which for Qud is the playfield with no UI overlay, "
+                        "so a status-screen shot comes back looking like the map. "
+                        "Exits 1 if it cannot settle, having still written the file.")
+    s.add_argument("--live-age", type=float, default=None, metavar="N",
+                   help="ui_age that counts as rendering (default 2)")
+    s.add_argument("--live-timeout", type=float, default=None, metavar="S",
+                   help="how long to keep retrying the activate (default 30)")
     s.set_defaults(fn=_cmd_shot)
 
     s = sub.add_parser("text")
@@ -973,6 +1027,8 @@ def build_parser():
     s.add_argument("x", type=int)
     s.add_argument("y", type=int)
     s.add_argument("--right", action="store_true", help="right-click")
+    s.add_argument("--middle", action="store_true",
+                   help="middle-click (Qud's Map Editor hangs commands off it)")
     s.add_argument("--double", action="store_true", help="double-click")
     s.add_argument("--hover", action="store_true",
                    help="post a real mouseMoved first (needed for Qud's legacy popups)")
@@ -986,6 +1042,7 @@ def build_parser():
     for _a in ("x1", "y1", "x2", "y2"):
         s.add_argument(_a, type=int)
     s.add_argument("--right", action="store_true", help="drag with the right button")
+    s.add_argument("--middle", action="store_true", help="drag with the middle button")
     s.add_argument("--steps", type=int, default=12, help="intermediate moves (default 12)")
     s.add_argument("--mod", default=None, metavar="ctrl+alt+shift",
                    help="modifiers held for the whole gesture")
@@ -1072,6 +1129,11 @@ def build_parser():
     s = sub.add_parser("wish", help="run a Caves of Qud wish via the Raves bridge, e.g. hv wish godmode")
     s.add_argument("text", nargs="+", help="the wish text (godmode | item:<Blueprint> | xp:<n> | ...)")
     s.set_defaults(fn=_cmd_wish)
+
+    s = sub.add_parser("bridge", help="send ANY first-party mod command, e.g. hv bridge pick label='New Game'")
+    s.add_argument("name", help="the mod command name (pick, uiback, statustab, export, ...)")
+    s.add_argument("args", nargs="*", help="key=value pairs passed as the command's args")
+    s.set_defaults(fn=_cmd_bridge)
 
     sub.add_parser("saves", help="Qud's save list + picker row order, from DISK (no game launch)").set_defaults(fn=_cmd_saves)
 

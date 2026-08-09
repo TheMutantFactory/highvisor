@@ -36,6 +36,15 @@ SWP_NOACTIVATE, SWP_SHOWWINDOW = 0x0010, 0x0040
 HWND_TOP, HWND_TOPMOST, HWND_NOTOPMOST = 0, -1, -2
 SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
 
+# mouse_event down/up pairs per button. Middle matters more than it looks: Qud's Map Editor
+# dispatches a "MiddleTile:x,y" command on it, and an app can hang real behaviour off a button
+# no amount of left/right clicking will reach.
+_BUTTON_EVENTS = {
+    "left": (0x0002, 0x0004),
+    "right": (0x0008, 0x0010),
+    "middle": (0x0020, 0x0040),
+}
+
 VK = {
     "RETURN": 0x0D, "ENTER": 0x0D, "TAB": 0x09, "ESC": 0x1B, "ESCAPE": 0x1B,
     "SPACE": 0x20, "BACKSPACE": 0x08, "BACK": 0x08, "DELETE": 0x2E, "DEL": 0x2E,
@@ -101,6 +110,9 @@ def _configure_win32():
          [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int,
           ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
           wintypes.DWORD]),
+        # SHORT, not int: the high byte carries the shift state and the low byte the VK,
+        # and -1 means "this character has no key on the current layout".
+        (user32.VkKeyScanW, ctypes.c_short, [ctypes.c_wchar]),
     ]
     for fn, res, args in sig:
         fn.restype, fn.argtypes = res, args
@@ -264,22 +276,54 @@ class WindowsBackend(PlatformBackend):
         return buf.value
 
     def list_targets(self) -> List[Target]:
+        """Enumerate top-level windows through WIN32, never UIA.
+
+        UIA reads (BoundingRectangle / Name / ClassName / ProcessId / IsOffscreen) are
+        cross-process COM calls into the target's UI thread. When that thread is not
+        pumping — Qud during world generation, or sitting on a modal — they BLOCK, and a
+        blocking COM call does not raise, so the per-item try/except around them bought
+        nothing: one stalled app wedged the whole daemon and every later op timed out.
+        Observed three times in one session on Lumpy; each needed a daemon restart.
+
+        The Win32 calls below read from the window manager rather than from the app, so a
+        hung process yields a stale rect instead of hanging us. `hv move` already verifies
+        against GetWindowRect, so listing now agrees with what move reports.
+
+        UIA is still the right tool for `inspect` (it is the only thing that knows about
+        elements) — it just has no business in the listing path.
+        """
         fg = user32.GetForegroundWindow()
         out = []
-        for w in self._toplevels():
+        buf = ctypes.create_unicode_buffer(256)
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        def _each(hwnd, _lparam):
             try:
-                r = w.BoundingRectangle
-                hwnd = w.NativeWindowHandle
-                title = self._win32_title(hwnd) or w.Name or ""
-                if not title and (r.width() <= 0 or r.height() <= 0):
-                    continue
+                if not user32.IsWindowVisible(hwnd):
+                    return True
+                rect = wintypes.RECT()
+                if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    return True
+                w_, h_ = rect.right - rect.left, rect.bottom - rect.top
+                title = self._win32_title(hwnd) or ""
+                # UIA's top-level view used to hide the OS's swarm of 1x1 untitled helper
+                # windows for us; EnumWindows does not, so drop them here. A real untitled
+                # window (some Godot/Unity surfaces) is still kept on size alone.
+                if not title and (w_ < 50 or h_ < 50):
+                    return True
+                user32.GetClassNameW(hwnd, buf, 256)
+                pid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
                 out.append(Target(
-                    id="hwnd:0x%X" % hwnd, kind="window", pid=w.ProcessId,
-                    title=title, class_name=w.ClassName or "",
-                    x=r.left, y=r.top, w=r.width(), h=r.height(),
-                    focused=(hwnd == fg), visible=not w.IsOffscreen))
+                    id="hwnd:0x%X" % hwnd, kind="window", pid=int(pid.value),
+                    title=title, class_name=buf.value or "",
+                    x=rect.left, y=rect.top, w=w_, h=h_,
+                    focused=(hwnd == fg), visible=True))
             except Exception:
-                continue
+                pass
+            return True
+
+        user32.EnumWindows(_each, 0)
         return out
 
     def launch(self, spec: str, args=None) -> ActionResult:
@@ -298,6 +342,36 @@ class WindowsBackend(PlatformBackend):
         except Exception as e:
             return ActionResult.fail("launch failed: %s" % e)
         return ActionResult(ok=True, detail="launch %s" % " ".join([spec] + args))
+
+    def mouse_move(self, target: str, x: int, y: int) -> ActionResult:
+        """Pure hover: warp + a REAL injected move, no buttons.
+
+        The darwin backend has had this since OP_MOUSE was defined; Windows never
+        implemented it, so `hv mouse` died with an AttributeError and every step that
+        wanted a hover had to fake one with a click. That is not a cosmetic gap --
+        Qud's chargen carousel SELECTS the card under the cursor and CONFIRMS on a
+        click anywhere else, so hovering and clicking are two different verbs there
+        and a driver that only has the second cannot choose a card deterministically.
+
+        Same MOUSEEVENTF_ABSOLUTE move as click() and for the same reason: SetCursorPos
+        alone raises no WM_INPUT, and Unity's Input System syncs its pointer only from
+        raw moves, so a warped cursor leaves Input.mousePosition stale. Deliberately
+        does NOT activate the window -- a hover that steals focus would change the
+        state it exists to observe.
+        """
+        hwnd = self._resolve(target)
+        if hwnd is None:
+            return ActionResult.fail("mouse needs a window target")
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        gx, gy = rect.left + int(x), rect.top + int(y)
+        sw, sh = self.screen_size()
+        user32.SetCursorPos(gx, gy)
+        user32.mouse_event(0x0001 | 0x8000,
+                           int(gx * 65535 / max(sw - 1, 1)),
+                           int(gy * 65535 / max(sh - 1, 1)), 0, 0)
+        time.sleep(0.12)
+        return ActionResult(ok=True, tier=4, detail="moved @ (%d,%d)" % (gx, gy))
 
     def click(self, target: str, x: int, y: int, button: str = "left",
               double: bool = False, hover: bool = False,
@@ -355,7 +429,7 @@ class WindowsBackend(PlatformBackend):
                 for vk in held:
                     self._send_modifier(vk, True)
                 time.sleep(0.06)
-            dn, up = (0x0008, 0x0010) if button == "right" else (0x0002, 0x0004)
+            dn, up = _BUTTON_EVENTS.get(button, _BUTTON_EVENTS["left"])
             for _ in range(2 if double else 1):
                 user32.mouse_event(dn, 0, 0, 0, 0)
                 user32.mouse_event(up, 0, 0, 0, 0)
@@ -401,7 +475,7 @@ class WindowsBackend(PlatformBackend):
         mods = [m.strip().lower() for m in (modifiers or "").split("+") if m.strip()]
         vk_for = {"ctrl": 0x11, "control": 0x11, "alt": 0x12, "shift": 0x10}
         held = [vk_for[m] for m in mods if m in vk_for]
-        dn, up = (0x0008, 0x0010) if button == "right" else (0x0002, 0x0004)
+        dn, up = _BUTTON_EVENTS.get(button, _BUTTON_EVENTS["left"])
         try:
             if held:
                 self._await_focus(hwnd)   # same rule as click(): focus first, then modifiers
@@ -718,8 +792,33 @@ class WindowsBackend(PlatformBackend):
             user32.PostMessageW(dest, WM_KEYUP, vk, 0)
             return ActionResult(ok=True, tier=2, detail="PostMessage VK 0x%02X" % vk)
         if len(name) == 1:
+            # A single printable character used to go out as WM_CHAR ALONE, always. That is a
+            # TEXT message carrying no virtual-key, so anything dispatching on a KEY — Godot's
+            # `event.keycode`, Unity's Input System — saw nothing, while text fields worked
+            # perfectly. Silent and asymmetric: `hv key win r` typed an "r" into a LineEdit but
+            # could not fire an `event.keycode == KEY_R` binding, and still reported ok.
+            #
+            # The two destinations want DIFFERENT messages, which is why this is not simply
+            # "post the whole WM_KEYDOWN -> WM_CHAR -> WM_KEYUP sequence a real keystroke
+            # produces". Measured on Raves (Godot) 2026-08-08: posting all three typed every
+            # character TWICE ("base" -> "bbaassee"), because Godot translates WM_KEYDOWN into
+            # text itself and then takes the WM_CHAR as a second character.
+            #
+            #   - a real EDIT child: inserts on WM_CHAR; a bare WM_KEYDOWN inserts nothing
+            #   - a top-level window (Godot/Unity, which expose no editable child): translates
+            #     the key itself, so the VK alone yields BOTH the keycode and the character
+            if edit is not None and edit.NativeWindowHandle:
+                user32.PostMessageW(dest, WM_CHAR, ord(name), 0)
+                return ActionResult(ok=True, tier=2, detail="PostMessage WM_CHAR %r (edit)" % name)
+            vks = user32.VkKeyScanW(name)
+            if vks != -1:
+                vk = vks & 0xFF
+                user32.PostMessageW(dest, WM_KEYDOWN, vk, 0)
+                user32.PostMessageW(dest, WM_KEYUP, vk, 0)
+                return ActionResult(ok=True, tier=2, detail="PostMessage VK 0x%02X (%r)" % (vk, name))
+            # No key produces this character on the current layout — text only is all there is.
             user32.PostMessageW(dest, WM_CHAR, ord(name), 0)
-            return ActionResult(ok=True, tier=2, detail="PostMessage WM_CHAR %r" % name)
+            return ActionResult(ok=True, tier=2, detail="PostMessage WM_CHAR %r (no VK)" % name)
 
         # Tier 4: combos / long sequences — activate then send globally.
         # (PostMessage can't carry modifier state reliably; see research findings.)

@@ -33,16 +33,16 @@
       {
         "id": "title",
         "label": "Title Screen",
-        "note": "`{game_live: false}` was an alternative here and is GONE (2026-08-08). It is the absence of bytes on a 0.35s probe, and absence of evidence is not evidence: it is satisfied by every menu screen, so whenever the first-party report was stale or missing this node claimed the title on an inference. Measured twice -- \"Title Screen via=live\" for 7 minutes while Qud sat on the Modding Toolkit with the mod unloaded, and again on a parked Keybinds screen that had a LIVE game behind it (a parked turn thread publishes no snapshot, so the probe reads false about liveness itself). `gamego` PLANS from that answer, which is what made it expensive.\n\nThe asymmetry with in_game's `{game_live: true}` is deliberate, not an oversight. The mod force-publishes a snapshot on connect ONLY when a game is live, so BYTES imply a running game -- a positive, near-sound inference whose worst case is naming in_game while we are on one of its own children. No bytes implies nothing. The positive stays; the negative goes.\n\nWith the report stale and no game live, nothing matches and the state is `unknown` -- 'running, screen unknown', which is the honest answer and one the planner can route out of. If an app is ever added with no reporter at all, give it one (the standing rule) rather than restoring this fallback.",
+        "note": "STILL PARTLY THE SAME BUG, found 2026-08-08 while trying to make Qud's chargen drivable: `scene: MainMenu` is a weak positive for the same reason `game_live: false` was. Qud hosts the ENTIRE character-creation flow inside the MainMenu Unity scene, so the scene name is true on the title and true on all five chargen screens. What normally saves it is that the mod reports a chargen WINDOW and via=window wins -- but that report LAGS a transition, and in the gap the scene falls back to MainMenu and this node claims the title. Measured: `hv state` said `Title Screen scene=MainMenu via=scene` while Qud was sitting on QudBuildSummaryModuleWindow, which the very next poll reported correctly. Anything that PLANS off that answer -- which is every `hv goto qud ...` -- can start its route from a screen the app is not on, and that is a large part of why walking Qud's chargen read as random. The honest fix is a first-party report for the title itself (the mod already names every chargen window; it just does not name this one), so the node can match a positive rather than the absence of a chargen window. A settle-until-two-reads-agree in the goto pre-flight would mask it but not fix it.\n\n`{game_live: false}` was an alternative here and is GONE (2026-08-08). It is the absence of bytes on a 0.35s probe, and absence of evidence is not evidence: it is satisfied by every menu screen, so whenever the first-party report was stale or missing this node claimed the title on an inference. Measured twice -- \"Title Screen via=live\" for 7 minutes while Qud sat on the Modding Toolkit with the mod unloaded, and again on a parked Keybinds screen that had a LIVE game behind it (a parked turn thread publishes no snapshot, so the probe reads false about liveness itself). `gamego` PLANS from that answer, which is what made it expensive.\n\nThe asymmetry with in_game's `{game_live: true}` is deliberate, not an oversight. The mod force-publishes a snapshot on connect ONLY when a game is live, so BYTES imply a running game -- a positive, near-sound inference whose worst case is naming in_game while we are on one of its own children. No bytes implies nothing. The positive stays; the negative goes.\n\nWith the report stale and no game live, nothing matches and the state is `unknown` -- 'running, screen unknown', which is the honest answer and one the planner can route out of. If an app is ever added with no reporter at all, give it one (the standing rule) rather than restoring this fallback.\n\nchildren are the SCENE CONTAINERS (each scored individually for 1:1 fidelity); the menu options nest under menu_box (they're both its contents and the nav edges to other scenes). DIFFED 2026-08-07 with ElliotSans finally loading on Lumpy: 97.24% content match at 1920x1080 (97.18% with the font hidden, so the font is worth +0.06 on the whole-screen number -- again the coarse metric barely moves; score per region). Where the font is ACTUALLY applied it is worth a lot: the menu item stack (New Game..Mods, MainMenu._apply_elliot) went region 82.04 -> 85.23% and glyph overlap 7.4 -> 17.7%. THREE CONCRETE DIVERGENCES FOUND, all measured, none yet fixed: (1) the LEFT LINK COLUMN sits +40 px LOW -- exactly one row pitch. Qud's rows top at y 855/894/932/972, Raves' at 895/934/975/1015; the pitch (39-40) and the x start (65 vs 64) already match, so it is a pure vertical offset of the whole column, and its glyph overlap is 0.0% purely because of it. (2) the BOTTOM HINT LINE is 39% too wide -- Qud x 776..1161 (386 px), Raves x 692..1228 (537 px). (3) the VERSION BLOCK bottom-right is larger, sits ~40 px higher, and carries an extra 'raves 0.2.0' line that Qud has no counterpart for -- it should almost certainly be gated on Settings.one_to_one(). Neither the links nor the hint line use ElliotSans at all (both scored IDENTICALLY with the font hidden), so they are still on the theme face -- likely the same _apply_elliot treatment the menu items get. The REST of the residual is the backdrop art itself, not UI: pure-art regions match only 90.99% (upper right) and 92.47% (upper left) with a mean channel delta of ~6/255 -- a pervasive low-level grade difference spread over the whole screen, which is why it dominates a 97% whole-screen score while no single 120x120 tile holds more than 2.5% of the error. The menu box frame itself is essentially exact (Qud x 794..1124 y 461, Raves x 794..1124 y 460). FIXED 2026-08-07, all three re-measured after the change: the LINK COLUMN now tops at y 855/894 against Qud's 855/894 (the 28 px pad it carried was modelling something the diff disproved; dropping it moved the column 54 px, not the 28 its height implied, so the net correction was +2 rather than the -12 arithmetic predicted -- re-measure after a layout change, do not trust the delta). The HINT LINE is 403 px against Qud's 387 (was 537): most of the excess was six-space separators measuring 70 px gaps where Qud's are 19, i.e. two spaces, plus a font drop 18 -> 16; its right edge now lands on Qud's 1161 exactly and its baseline on y 1036. The VERSION CORNER lost the 'raves x.y.z / hv' line (no Qud counterpart, and 1:1 has no business showing it) and now inks at y 1034/1054, exactly Qud's. Whole-screen 97.24 -> 97.26; region-local the links went 89.10 -> 90.16% and the hint 85.23 -> 86.78%. TWO METRIC TRAPS recorded because both read as failures and are not: (a) 'glyph overlap' still reports 0.0% for the link column even with the rows pixel-aligned -- Qud draws those links too dim for a >120 ink threshold to find ANY Qud pixel to agree with, so use local contrast against a blurred copy for text over painted art; (b) the version corner's region score DROPPED 93.94 -> 88.79 while becoming more correct, because our text moved off empty background and onto Qud's own text, and Raves deliberately renders that corner brighter than Qud's near-illegible build line. Text-over-text scores worse than text-over-nothing. REMAINING: the backdrop art, which is the whole rest of the residual -- pure-art regions match 90.99%/92.47% at a mean channel delta of ~6/255. BACKDROP FIXED 2026-08-07 -> 98.48% whole-screen. It was NOT a colour grade, which is what I first called it: the two backdrops' channel means already agreed within 1% (R 51.4/50.7, G 74.1/73.4, B 68.4/67.7), and matching tone at mean|d| 6 means the difference is local detail. The real cause was a ~1% SCALE mismatch in the cover fit. Two measurements pinned it: the best per-window alignment offset ran +8 px far-left and -8 px far-right, SYMMETRIC about the centre (a pan would be constant, a scale is symmetric), and the error lived on EDGES -- flat areas mean|d| 4.94 vs edge areas 43.01. Fitted by searching title_bg.json LIVE (MainMenu polls it, so sx/sy/dx/dy probe without a rebuild or restart) and baked into MainMenu._bg_nudge as scale 1.010. FITTING TRAP worth carrying: the first search only reached mean|d| 4.5 because its sample windows overlapped the CAVES OF QUD wordmark, which does not move with the backdrop and biased the fit toward doing nothing; logo-free windows converged to a pure centred scale with both pans at zero, mean|d| 6.0 -> 1.3, agreeing with the analytic estimate from the alignment levers. An anisotropic fit scored marginally better (1.14 vs 1.29) but cover-fitting is aspect-preserving so anisotropy has no mechanism -- that 0.04% split is search quantisation, not signal. RESULTS with the machine-local override deleted: art mid-right 87.16 -> 99.47%, bottom 86.13 -> 99.28%, mid-left 93.75 -> 99.53%, edge error 43.01 -> 6.33, flat error 4.94 -> 1.20.",
         "done": {
           "qud": 1.0,
-          "raves": 0.9
+          "raves": 0.96
         },
         "detect": {
           "qud": [
             {
               "scene": [
-                "MainMenu",
+                "TitleScreen",
                 "title"
               ]
             }
@@ -114,7 +114,8 @@
                       "scene": [
                         "chargen_game_mode",
                         "chargen_genotype",
-                        "chargen_subtype"
+                        "chargen_caste",
+                        "chargen_calling"
                       ]
                     },
                     {
@@ -150,6 +151,22 @@
                     "note": "Qud side had NO detector until the whole-tree FULL sweep 2026-08-07 exposed it: the chooser was open and `hv state` still said Title Screen (scene=QudGamemodeModuleWindow, via=live — an unmapped name falling back to title's game_live signal). Every consequence looked like a navigation bug: `goto new_game` reported landing on the title, and `goto game_mode` then tried to click 'New Game' on a screen already showing the chooser. The mod reports the window first-party, so take that rather than adding OCR substrings — Qud's title OCRs as 'New Kame' and 'Optlons' at this size anyway."
                   },
                   {
+                    "id": "chartype",
+                    "label": "Select Character Option",
+                    "done": {
+                      "qud": 0.7,
+                      "raves": 0.0
+                    },
+                    "detect": {
+                      "qud": [
+                        {
+                          "scene": "QudChartypeModuleWindow"
+                        }
+                      ]
+                    },
+                    "note": "`:choose character type:` -- Presets [A] / New [B] / Random [C] / Library [D] / Last [E]. A WHOLE SCREEN the tree did not know existed: the old model went game_mode -> genotype directly, because nobody had walked Qud's chargen with a working detector. It is the screen the ':choose preset:' capture at the top of this session had come down from. Raves has no equivalent at all -- its flow jumps game_mode -> genotype -- so done=0."
+                  },
+                  {
                     "id": "genotype",
                     "label": "Choose Genotype",
                     "done": {
@@ -161,12 +178,17 @@
                         {
                           "scene": "chargen_genotype"
                         }
+                      ],
+                      "qud": [
+                        {
+                          "scene": "QudGenotypeModuleWindow"
+                        }
                       ]
                     }
                   },
                   {
                     "id": "calling",
-                    "label": "Calling / Subtype",
+                    "label": "Choose Calling (Mutated Human)",
                     "done": {
                       "qud": 0.5,
                       "raves": 0.2
@@ -174,10 +196,37 @@
                     "detect": {
                       "raves": [
                         {
-                          "scene": "chargen_subtype"
+                          "scene": "chargen_calling"
+                        }
+                      ],
+                      "qud": [
+                        {
+                          "scene": "QudSubtypeModuleWindow"
                         }
                       ]
-                    }
+                    },
+                    "note": "The MUTANT branch of the subtype stage. Qud calls caste and calling both `Subtype` internally but gives them DIFFERENT windows -- this flat one, and the grouped `QudSubtypeModuleCategoryWindow` for castes -- so the two are distinguishable first-party and need no OCR. Raves reaches this node by confirming the DEFAULT genotype (Mutated Human), which is why the pre-existing raves genotype->calling edge is a bare Enter."
+                  },
+                  {
+                    "id": "caste",
+                    "label": "Choose Caste (True Kin)",
+                    "done": {
+                      "qud": 0.5,
+                      "raves": 0.2
+                    },
+                    "detect": {
+                      "qud": [
+                        {
+                          "scene": "QudSubtypeModuleCategoryWindow"
+                        }
+                      ],
+                      "raves": [
+                        {
+                          "scene": "chargen_caste"
+                        }
+                      ]
+                    },
+                    "note": "The TRUE KIN branch, and the one the 1:1 work is aimed at. Qud draws it as a horizontal card carousel of twelve castes under three coloured, dash-ruled city headers (Ekuemekiyye / Ibul / Yawningmoon), letter-keyed [A]-[L], with the chosen caste's bullets below -- the SAME carousel chrome as every other chargen screen, just with a category row inserted, which pulls the title block up from y482 to y432. Raves answered this stage with a bespoke left-list + right-detail panel (SubtypeScreen.gd) until 2026-08-08, when CasteScreen.gd replaced it with the shared card template; the same change split Raves' single `chargen_subtype` scene into `chargen_caste`/`chargen_calling`, so this detect and the calling one now name different screens instead of aliasing."
                   },
                   {
                     "id": "attributes",
@@ -389,9 +438,10 @@
               {
                 "id": "map_editor",
                 "label": "Map Editor",
+                "note": "Qud's map editor: an 80x25 cell canvas with a blueprint palette. WALKED LIVE at 1920x1080 on Lumpy (Qud 1.0.5, 2026-08-06) — every menu opened and captured; the command surface below is cross-checked against Overlay.MapEditor.MapEditorView by reflection, so it includes verbs that have no menu entry. LAYOUT: menu bar y=16 (File x46, Edit x112, Transform x203, View x293, Recent x369), title 'Map Editor' centred x959; canvas x50..1470 y208..872 (80x25 => cell ~17.7x26.6) with a green cell cursor; palette panel x1524..1920 — filter field 'Enter text...' at y4..30, a '[ ] In Use' toggle at y46 (right edge), the blueprint list with per-row tile icons, and readouts at the bottom: 'Mouse Position: X, Y' + 'Brush: <name>' (y695) and 'Selected Cell: X, Y|none' (y716); control hints bottom-left y1029/y1045. EXIT: File > Exit > confirm Yes returns to the TOOLKIT menu, and it leaves the legacy view string stuck at 'MapEditor' — trust `scene` (window-priority), not `view`. RAVES: MapEditorScreen.gd shipped — 95.16% content congruence at 1920x1080 on the first build, geometry MEASURED off the reference (menu text at x29/95/160/275/342, title x913, canvas 50,208 1420x664 = 80x25, palette pitch 24, readouts y688/y710, hints y1023/y1039). Working: the five menus with their verbatim items + hotkey column (Recent draws no panel when empty, matching Qud), the dotted 80x25 canvas with hover cursor, Shift+drag region select, Ctrl+click paint, Alt+click sample, Ctrl+Z undo, flips, Select All, the NorthSheva overlay toggle, the live palette from blueprints.json with filter + In Use, and all three readouts. TILES: painted cells now render Qud's REAL tile art — QudTiles recolours the exported grayscale mask with the blueprint's TileColor/DetailColor (BlueprintExporter gained tilecolor+detail; 1529 blueprints carry both), falling back to the render glyph, and a missing mask is fetched once via the new `wanttile` bridge command (only ~245 of ~5.2k tiles ship exported, so screens ask for what they draw). NOT DONE: no .rpm file I/O (New/Load/Save/Save As/Test inert) and no per-object context menu. TILE/PAINT PATH NOW VERIFIED LIVE (2026-08-07): Ctrl+click paints and the cell renders the blueprint's art — the glyph fallback confirmed on screen for a tile-less blueprint. The blocker was a highvisor bug, since fixed: a KEYEVENTF_SCANCODE modifier press is invisible to Godot (Unity polls global key state and accepts it; Godot tracks modifiers from key MESSAGES and wants the VK form), so hv now emits BOTH forms. Two Raves bugs were found by driving it: palette rows had zero width (a Control with custom_minimum_size (0,h) in a non-expanding VBox is unclickable, so the brush never set) and modifiers now come off the EVENT rather than Input.is_key_pressed. TILE PIPELINE FULLY VERIFIED (2026-08-07): painting Clue_BloodyWatervine (tilecolor &w, detail r) drew a recognisable watervine SPRITE in brown/orange tones — 252 lit px across 6 colour groups, i.e. a real 2-colour mask recolour, not the glyph (~40px, one hue) or the flat swatch. The on-demand fetch works too: `wanttile creatures/sw_giant_clam.bmp` produced creatures_sw_giant_clam.bmp on disk in ~1s. FLATTENED TILE PATHS FIXED (2026-08-07): 345 of 4649 blueprint tile values arrive already flattened ('Assets_Content_Textures_Creatures_sw_farmer.bmp') and resolved to nothing. TileExportPump.Resolve now repairs them — drop the Assets_Content_Textures_ prefix, then split at the first underscore followed by a lower-case letter (Qud dirs are Capitalised, file names start lower-case). MEASURED canonical form: 'Creatures/sw_farmer.bmp' resolves while 'creatures/sw_farmer.bmp' (case) and 'Assets/Content/Textures/Creatures/sw_farmer.bmp' (prefix) both return null. The file is written under the ORIGINAL requested name so the client lookup still matches. Sampled 12 previously-dead paths: 11 now export; backslash separators are also repaired. The residual misses are NOT a path bug — those blueprints reference art absent from the shipped atlas (verified: the correct forward-slash form fails too), and the pump now LOGS 'could not resolve' instead of returning silently, which is what made this invisible before. RPM FILE I/O DONE and verified LOSSLESS: loaded Qud's own Barathrums_Study.rpm, saved it back, and compared parsed cell-by-cell against the pristine original — 2000 cells vs 2000, 1904 objects vs 1904, 0 missing / 0 extra / 0 differing. Cells hold object DICTS so Owner/Part/<intproperty> survive the trip; Qud writes ALL 2000 cells including 122 empty ones as <cell X Y></cell>, and matching that is what closed the last diff. New/Load/Save/Save As plus Ctrl+N/O/S are wired; the picker is a Godot FileDialog (a deliberate non-1:1 spot — a file chooser is chrome, not game UI). TEST (Ctrl+T) NOW BUILDS A ZONE, verified end to end (2026-08-07): Raves writes the on-screen map to a scratch .rpm, the bridge's new `mapedit do=test` hands the path to MapEditorDriver.Test, which loads it into Qud's LIVE MapEditorView via MapFile.LoadFile and invokes Qud's own MapEditorView.Test (-> RunTest -> async BuildTestZone, deliberately not reimplemented — Qud owns worldgen). PROOF: the heartbeat flipped from {scene:MapEditorWindow, live:false} to {scene:play, live:true, view:Stage} with 'Test invoked - Qud is building the zone' in Player.log. Requires Qud to be sitting in its Map Editor; that is Qud's constraint and the driver reports it plainly. GOTCHA WORTH KNOWING: a long-lived Qud can reach a state where GameManager.uiQueue STOPS DRAINING even while focused — every mod-driven action silently no-ops. The tell is heartbeat `ui_age` climbing without bound (seen at 83s -> 224s); the same command succeeded immediately against a freshly launched Qud. Check ui_age before diagnosing any mod command as broken. PER-OBJECT CONTEXT MENU DONE (2026-08-07), 87.7% panel-local congruence. The five items and their order are Qud's own, read out of MapEditorView.OnEnter's Menu.addItem calls (Set owner / Set part / Add string property / Add int property / Remove property, and -- unlike the File and Edit menus -- NO hotkey column, since no HotKeyText follows those five addItem calls). Prompts are verbatim from the *ForContext methods' IL: getString('New owner:'/'New part:'), getPair('Define property name and value','[Name]','[Value]'/'1'), getChoice('Choose a property to remove') with 'Name (v1, v2)' labels, and info('No properties defined.') when there are none. GEOMETRY measured off a live capture: panel top-left sits ON the cursor (offset 0,+1), 127x85, text inset 13, colour (194,205,204); the panel is OPAQUE with 1px alternating scanlines (5,50,48)/(2,22,22) whose parity follows SCREEN y, not the panel. Qud draws the labels on a FIXED 5.0 px CELL (19 chars -> 94 px ink, 16 -> 79, 15 -> 74) which no integer Godot font size reproduces -- 8 is 5% narrow, 9 is 7% wide -- so Raves advances the pen per character, and the ink widths now match 94/94 and 79/79. Dialogs reproduced from measurement too (panel (107,107,107) centred on x=959.5, screen dimmed black at alpha 0.42, fields a fixed 204 wide and pure white, buttons (245,245,245), ink (55,55,55)); 77% on the getString popup, the residual being the sans face -- Qud's modding dialogs use Unity's stock UI font, so this shares the ElliotSans gap. THE TRIGGER IS A DELIBERATE DIVERGENCE: DisplayContextInRegion has NO caller anywhere in Assembly-CSharp (IL-scanned every MapEditorView method), so in the shipped game this menu is built and never shown. OnClick does dispatch 'MiddleTile:x,y' and OnCommand has no branch for it -- a slot Qud dispatches and drops -- so Raves hangs the menu on the middle button. Also found and fixed a real parity gap while proving that out: right-click on a tile in Qud is an ERASER (OnCommand's RightTile: branch pops the top object with a 'Remove' undo), which Raves now does. VERIFIED END TO END, each action driven live and read back out of the saved .rpm: Set owner wrote Owner=\"Joppa\", Add int property wrote <intproperty>, Add string property wrote <property>, Remove property listed 'Name (value)' and dropped the count to 0 while Owner survived. The .rpm gained <property> and the cell Clear attribute, both named off MapFile.Save/LoadObjectNode rather than guessed. INTEROP PROVEN: Qud itself loaded the Raves-authored file into its own Map Editor and built it into a live zone (heartbeat MapEditorWindow -> {scene:play, live:true}). STILL OPEN: GLYPH FALLBACK FIXED: Qud's RenderString is EITHER a literal char OR a CP437 code as a DECIMAL STRING (Fulcrete '176' = light shade, Wall '219' = full block, '247' = approx among the most common) — drawing it verbatim printed the digits once per wall. Now resolved via ASCII 32..126 plus a CP437 table for 128..255, and drawn CENTRED in the cell in the console face. A reloaded Barathrums_Study is legible: shaded-block walls, furniture as π/¥/µ/ß, tile art where a mask exists. || Raves publishes scene=map_editor but had NO raves detector, so `hv state` read it as 'running · unknown screen' and any assert on this node timed out. Found 2026-08-08 when a tour bug stopped hiding failed asserts.",
                 "done": {
                   "qud": 0.95,
-                  "raves": 0.93
+                  "raves": 0.96
                 },
                 "detect": {
                   "qud": [
@@ -400,6 +450,11 @@
                         "MapEditorWindow",
                         "MapEditor"
                       ]
+                    }
+                  ],
+                  "raves": [
+                    {
+                      "scene": "map_editor"
                     }
                   ]
                 },
@@ -589,10 +644,10 @@
               {
                 "id": "blueprint_browser",
                 "label": "Blueprint Browser",
-                "note": "Converted 2026-08-07, the LAST legacy recipe in the tree. It waited on a raves title -> modding_toolkit edge, which did not exist because only Qud had one — an edge out of an unreachable node is unreachable from everywhere, and selftest_plan rejects that, correctly. Both new edges click by LABEL. Two things the old recipe encoded without saying so: Raves' Modding Toolkit link is a mouse-only gui_input among the title's bottom-left LINK_ITEMS, so it needs no activating `space` (every other raves title edge does); and a toolkit row's gui_input selects AND activates, so it needs no Enter — the recipe's four `down`s plus Enter silently depended on Blueprint Browser staying the fifth row. Esc from here goes to the TITLE, not back to the toolkit (MainMenu._close_overlay), matching Qud.",
+                "note": "Converted 2026-08-07, the LAST legacy recipe in the tree. It waited on a raves title -> modding_toolkit edge, which did not exist because only Qud had one — an edge out of an unreachable node is unreachable from everywhere, and selftest_plan rejects that, correctly. Both new edges click by LABEL. Two things the old recipe encoded without saying so: Raves' Modding Toolkit link is a mouse-only gui_input among the title's bottom-left LINK_ITEMS, so it needs no activating `space` (every other raves title edge does); and a toolkit row's gui_input selects AND activates, so it needs no Enter — the recipe's four `down`s plus Enter silently depended on Blueprint Browser staying the fifth row. Esc from here goes to the TITLE, not back to the toolkit (MainMenu._close_overlay), matching Qud. filterable collapsible tree of the full ObjectBlueprints hierarchy (Object, SultanMuralController expandable) — the natural UI mirror of the Object Checker enumeration. Back [3709,2068] returns to TITLE. RAVES: BlueprintBrowserScreen.gd — reads blueprints.json (BlueprintExporter walks GameObjectFactory.Factory.Blueprints, so a modded install shows its own; 5247 rows, and its 9 roots + expander set match Qud's screen exactly). PIXEL-DIFFED 2026-08-06: 99.77% content match, no divergent region. Layout MEASURED off Qud, not nudged — filter box x18..305 y12..38, row glyph tops 62/86/110 (pitch 24), expander x8..17, cube icon x27..43 (17x18, drawn as an isometric outline — a text glyph measured 9px against Qud's 17), text x48, Back glyph x1832..1884 y1026..1042; all now exact. The status line and opening row highlight are user-mode-only (Qud has neither). REMAINING (the whole residual): Qud's list font is ElliotSans, condensed — ~6.5px/char vs Atkinson's 8.4 at a matched cap height, so names run ~29% wide. The screen loads ElliotSans from title/chrome/ when present (correct on the Mac) and falls back otherwise; NO mod exporter for it exists yet — that is the next unit of work for this leaf, and it is shared with every other modern-UI screen. FONTS EXTRACTED (2026-08-07) -- the long-standing blocker is gone. Unity's Font asset keeps the ORIGINAL file in m_FontData, so Caves of Qud ships the real vector TTFs verbatim inside sharedassets0.assets; tools/capture/fonts.py carves them structurally (parse the sfnt table directory at each candidate offset and require every record to be self-consistent, plus a size ceiling -- without which a chance 'OTTO' inside texture data validates as a 120 MB font). 18 fonts are embedded; 4 matter: Elliot Sans Regular/Medium/Bold and LIBERATION SANS, which is what Qud's modding-tool dialogs actually use (Unity's stock UI face, not Qud's console mono). They go player-install -> player-support-dir like the tile art and are NEVER committed. THE LIST FACE IS ELLIOT SANS *MEDIUM* AT 13 px, and width alone cannot establish that: width-per-cap puts Qud at 13.56, between Regular's 13.39 and Medium's 13.89, inside the noise. Ink DENSITY separates them -- same string at a matched 9 px cap gives total ink 74805 (Regular) / 99652 (Medium) / 123041 (Bold) against Qud's own 95458. I picked Regular off the width ratio first and the density check corrected it; use density to pick a WEIGHT and width-per-cap to pick a SIZE. A 2 px baseline offset the real face exposed is fixed too, so row baselines now match to the pixel. METHOD NOTE worth carrying: whole-screen content_match moved only 99.75 -> 99.79 because a 1920x1080 screen is dominated by matching black and the metric is nearly blind to a text column; scored on the name column, glyph agreement went 15.3% -> 27.2%. Score per REGION when judging a single element. The residual is rasteriser difference (Unity TMP atlas vs Godot FreeType at a 9 px cap), not layout.",
                 "done": {
                   "qud": 0.9,
-                  "raves": 0.9
+                  "raves": 0.95
                 },
                 "detect": {
                   "qud": [
@@ -1823,20 +1878,20 @@
       "to": "new_game",
       "steps": [
         {
-          "activate": "CavesOfQud"
-        },
-        {
-          "click_text": "New Game",
-          "window": "CavesOfQud"
+          "bridge": "pick",
+          "args": {
+            "label": "New Game"
+          }
         },
         {
           "sleep": 1.0
         }
       ],
       "verify": {
-        "ocr_contains": "game mode"
+        "node": "new_game"
       },
-      "timeout": 15
+      "timeout": 15,
+      "note": "FIRST-PARTY, same move as title->game_mode (Qud hosts game mode and the rest of chargen in one screen). Converted 2026-08-08 after `bridge: pick` was verified on macOS too: it replaces a per-OS seam (click_text for posix, a focus-prime plus a select-then-activate double click for nt) with one call that needs no OCR, no coordinates and no focus -- and whose correctness does not depend on WHETHER A SAVE EXISTS, which the coordinate form did (New Game is only the default row on a fresh install; once chargen has run the title defaults to Continue)."
     },
     {
       "app": "qud",
@@ -2064,7 +2119,16 @@
         },
         {
           "click_text": "Continue",
-          "window": "Raves of Qud"
+          "window": "Raves of Qud",
+          "os": "posix"
+        },
+        {
+          "click": [
+            958,
+            578
+          ],
+          "window": "Raves of Qud",
+          "os": "nt"
         },
         {
           "dismiss": {
@@ -2084,7 +2148,8 @@
       "verify": {
         "node": "in_game"
       },
-      "timeout": 60
+      "timeout": 30,
+      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || Continue is CLICKED, not selected with arrow keys. The keyboard form assumed the selection starts on New Game and stepped down once — but Raves REMEMBERS the menu selection, so after any earlier navigation that single `down` lands somewhere else and `space` activates the wrong row (or nothing). Verified live: arrow keys do move the selection, so this was never a key-delivery problem; it was a relative move against an unknown starting point. A click is position-independent. Continue measured at (958,578) at 1920x1080. "
     },
     {
       "app": "raves",
@@ -2287,7 +2352,17 @@
         },
         {
           "click_text": "New Game",
-          "window": "Raves of Qud"
+          "window": "Raves of Qud",
+          "os": "posix"
+        },
+        {
+          "click_hover": [
+            958,
+            532
+          ],
+          "window": "Raves of Qud",
+          "note": "Windows-viable: click_text needs OCR, which exists only in the darwin backend, so this edge failed on Lumpy with `ocr failed:` and took the whole chargen subtree with it. MEASURED at 1920x1080 -- New Game is the first row of the title menu box. Two pixels off Qud's own (960,534) because the two menus are separately laid out; close enough that the gap is worth a parity leaf, not a coordinate fudge.",
+          "os": "nt"
         },
         {
           "dismiss": {
@@ -2300,7 +2375,8 @@
       "verify": {
         "scene": "chargen_game_mode"
       },
-      "timeout": 12
+      "timeout": 12,
+      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other."
     },
     {
       "app": "raves",
@@ -2308,9 +2384,17 @@
       "to": "genotype",
       "steps": [
         {
+          "hover": [
+            840,
+            563
+          ],
+          "window": "Raves of Qud",
+          "note": "SELECT Classic EXPLICITLY -- do not trust the default. Raves' cards select on mouse_entered, and the title->game_mode edge leaves the pointer at (958,532), which lands on card index 2 of the 5-card row: this edge silently confirmed ROLEPLAY while its note claimed Classic, so every route through it built the wrong character. Caught 2026-08-08 by reading the breadcrumb on Choose Caste, which said 'Roleplay | True Kin | Caste'. Parking the cursor on empty space does NOT fix it -- hovering away leaves the stale selection standing -- so the cursor has to land on the card we actually want. Classic is index 1 of 5 (Tutorial/Classic/Roleplay/Wander/Daily) on the 120px pitch centred at x=960, hence 840."
+        },
+        {
           "key": "enter",
           "window": "Raves of Qud",
-          "note": "confirm the default card (Classic)"
+          "note": "confirm the now-hovered Classic card"
         }
       ],
       "verify": {
@@ -2326,13 +2410,39 @@
         {
           "key": "enter",
           "window": "Raves of Qud",
-          "note": "confirm the default genotype"
+          "note": "confirm the default genotype (Mutated Human [A]) -- which is WHY this edge lands on calling and not caste"
         }
       ],
       "verify": {
-        "scene": "chargen_subtype"
+        "scene": "chargen_calling"
       },
       "timeout": 10
+    },
+    {
+      "app": "raves",
+      "from": "genotype",
+      "to": "caste",
+      "steps": [
+        {
+          "activate": "Raves of Qud"
+        },
+        {
+          "click_hover": [
+            1042,
+            563
+          ],
+          "window": "Raves of Qud",
+          "note": "True Kin [B]. ONE click, not Qud's two: a Raves chargen card's own gui_input runs `_engage(); _select(idx); _confirm()` (ChargenCardScreen.gd), so the click IS the confirmation. MEASURED, and the measurement is itself a parity finding -- Raves' two cards sit on a ~143px pitch at y563 against Qud's 125px at y590, so the coordinates deliberately are NOT shared between the two apps' edges."
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "scene": "chargen_caste"
+      },
+      "timeout": 12,
+      "note": "The True Kin branch, added 2026-08-08 so the Choose Caste screen is drivable on BOTH sides and its 1:1 numbers can be measured rather than inherited. The verify NAMES THE BRANCH, which it could not do when added: Raves reported one scene for caste and calling alike, so the edge passed even if the click had missed and confirmed Mutated Human instead. Splitting the scene (MainMenu._on_genotype_chosen) closed that, and it is what makes this edge trustworthy unattended."
     },
     {
       "app": "raves",
@@ -2343,7 +2453,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "k",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            275,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2351,8 +2471,8 @@
         "scene": "status_skills",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2363,7 +2483,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "x",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            490,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2371,8 +2501,8 @@
         "scene": "status_attributes",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2383,7 +2513,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "e",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            726,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2391,8 +2531,8 @@
         "scene": "status_equipment",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2403,7 +2543,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "n",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            908,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2411,8 +2561,8 @@
         "scene": "status_tinkering",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2423,7 +2573,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "j",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            1080,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2431,8 +2591,8 @@
         "scene": "status_journal",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2443,7 +2603,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "q",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            1236,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2451,8 +2621,8 @@
         "scene": "status_quests",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2463,7 +2633,17 @@
           "activate": "Raves of Qud"
         },
         {
-          "key": "ctrl+f",
+          "key": "f2",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        },
+        {
+          "click": [
+            1408,
+            136
+          ],
           "window": "Raves of Qud"
         }
       ],
@@ -2471,8 +2651,8 @@
         "scene": "status_reputation",
         "app": "raves"
       },
-      "timeout": 8,
-      "note": "Qud's Commands.xml default binding for this screen."
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). Qud's Commands.xml default binding for this screen. MEASURED ON macOS 2026-08-08, which narrows the reason: the letter keys DO reach MainFrame here -- `hv key raves k` opens Skills, and the whole-tree tour arrived at all eight status nodes through them, twice. So 1:1's letter-forwarding is NOT identical on both platforms. The reason this edge is one form rather than a per-OS seam is simpler: F2 + tab-click works on BOTH, and the letter keys only work on one. Same conclusion, different ground -- and it means a future Windows fix to the forwarding cannot be inferred from macOS behaviour."
     },
     {
       "app": "raves",
@@ -2487,11 +2667,11 @@
           "window": "Raves of Qud"
         },
         {
-          "sleep": 0.6
+          "sleep": 0.8
         },
         {
           "click": [
-            1615,
+            1619,
             136
           ],
           "window": "Raves of Qud"
@@ -2501,7 +2681,8 @@
         "scene": "status_messagelog",
         "app": "raves"
       },
-      "timeout": 8
+      "timeout": 15,
+      "note": "Raves opens the status overlay with F2 and you pick a TAB. It DOES define Qud's per-screen letter bindings now (MainFrame.STATUS_TAB_KEYS: k/x/e/n/j/q plus Tab and I) -- but they are unreachable while 1:1 is on, because Raves FORWARDS letters to Qud. Measured on Windows 2026-08-08 with both apps in-game: f2 opens the overlay, k/x/e/n/q do nothing through either delivery path, and j raises a PopupMessage in QUD -- i.e. the key arrives and Qud's own binding fires. So this is a routing fact about 1:1 mode, identical on both platforms, NOT a Windows input problem: the F2 + tab-click form is the right edge on macOS too. (An earlier version of this note said Raves lacked the bindings; that was true when it was written and is not now.) Tab x MEASURED off the live strip at 1920x1080; y=136 is the strip's text row (the messagelog edge already used it). "
     },
     {
       "app": "raves",
@@ -2567,11 +2748,10 @@
       "to": "game_mode",
       "steps": [
         {
-          "activate": "CavesOfQud"
-        },
-        {
-          "click_text": "New Game",
-          "window": "CavesOfQud"
+          "bridge": "pick",
+          "args": {
+            "label": "New Game"
+          }
         },
         {
           "sleep": 1.0
@@ -2581,7 +2761,161 @@
         "node": "game_mode"
       },
       "timeout": 15,
-      "note": "Qud shows game mode and the rest of character creation as ONE screen, so this is the same move as title->new_game. Spelled out rather than aliased: an edge whose steps you have to look somewhere else to read is how recipes drifted."
+      "note": "Qud shows game mode and the rest of character creation as ONE screen, so this is the same move as title->new_game. Spelled out rather than aliased: an edge whose steps you have to look somewhere else to read is how recipes drifted. FIRST-PARTY: the title menu's rows dispatch on Qud's own \"Pick:<label>\" event, so the mod pushes it directly -- no coordinates, no OCR, and no focus dependency. It replaced a focus-priming click plus a two-click select-then-activate dance whose correctness depended on WHETHER A SAVE EXISTED (New Game is only the default row on a fresh install; once chargen has run once the title defaults to Continue and a fixed-coordinate recipe lands on the wrong row)."
+    },
+    {
+      "app": "qud",
+      "from": "game_mode",
+      "to": "chartype",
+      "steps": [
+        {
+          "bridge": "choose",
+          "args": {
+            "label": "Classic"
+          }
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "chartype"
+      },
+      "timeout": 15,
+      "note": "FIRST-PARTY, and it ended a long dead end. Qud's chargen screens are modern Qud.UI windows that read NONE of the input queues anything outside the process can reach: SendKeys, raw SendInput scancodes, the printed [A]-[E] card hotkeys, and every tag pushed through Keyboard.PushMouseEvent/PushCommand all moved exactly 0 pixels (measured by frame differencing, 2026-08-08). Clicks DID land -- they are Unity UI raycasts -- but their semantics never resolved into a model that survived a second run: a click on an unselected card sometimes only selected it and sometimes selected AND activated, a click on empty space confirmed the current selection, and a cursor left resting from the PREVIOUS edge appeared to pre-select whatever card drew under it, so an edge's behaviour depended on where the last edge parked the mouse. Reflecting the live window instead (mod: UiReflector) named the way in -- the window's own GetSelections() and its selection handler -- and the mod's `choose` command matches a choice BY LABEL and hands it to that handler. It cannot land on the wrong card, because the choice object IS the identity; there is no geometry left to get wrong. The card-pitch note that used to live here is preserved on genotype->caste, where it is still needed for RAVES-side layout parity."
+    },
+    {
+      "app": "qud",
+      "from": "chartype",
+      "to": "genotype",
+      "steps": [
+        {
+          "bridge": "choose",
+          "args": {
+            "label": "New"
+          }
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "genotype"
+      },
+      "timeout": 15,
+      "note": "'New' = build a character from scratch, as against Presets/Random/Library/Last. Matching is exact-first, so this cannot be stolen by a longer label that merely contains 'New'. See game_mode->chartype for why these are bridge calls and not clicks."
+    },
+    {
+      "app": "qud",
+      "from": "genotype",
+      "to": "caste",
+      "steps": [
+        {
+          "bridge": "choose",
+          "args": {
+            "label": "True Kin"
+          }
+        },
+        {
+          "sleep": 1.0
+        }
+      ],
+      "verify": {
+        "node": "caste"
+      },
+      "timeout": 15,
+      "note": "THE TRUE KIN BRANCH. See game_mode->chartype for why this is a bridge call. QUD'S CARD GEOMETRY, kept here because Raves' carousel is built to match it: card centres lie on a 125px pitch centred at x=960, y=590 at 1920x1080, so an N-card row puts card i at 960+(i-(N-1)/2)*125 -- True Kin is index 1 of 2. The caste screen itself breaks that y: it inserts a category-header row that lifts its cards to y563."
+    },
+    {
+      "app": "qud",
+      "from": "genotype",
+      "to": "calling",
+      "steps": [
+        {
+          "bridge": "choose",
+          "args": {
+            "label": "Mutated Human"
+          }
+        },
+        {
+          "sleep": 1.0
+        }
+      ],
+      "verify": {
+        "node": "calling"
+      },
+      "timeout": 15,
+      "note": "The MUTANT branch. See game_mode->chartype for why this is a bridge call. The click version of this edge was the worst of the four: Mutated Human is card [A] and so ALREADY selected on arrival, which made the first click activate and the second land on the next screen -- the one place the select-then-activate pair was not free, and it only stayed safe by accident."
+    },
+    {
+      "app": "qud",
+      "from": [
+        "caste",
+        "calling"
+      ],
+      "to": "genotype",
+      "steps": [
+        {
+          "click_hover": [
+            78,
+            576
+          ],
+          "window": "CavesOfQud",
+          "note": "[Esc] Back, CLICKED rather than pressed -- keys do not reach Qud on Lumpy (see game_mode->chartype). The affordance sits at the same place on every chargen screen."
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "genotype"
+      },
+      "timeout": 15,
+      "note": "The back edges are deliberately ONE STEP each rather than one edge that clicks Back three times: Back does not stop at the top of chargen, it carries on to the title, so a fixed-length climb overshoots from any start but the deepest. Single steps let the planner compose exactly the climb a route needs -- and this one is what makes the sideways move caste <-> calling possible without a restart."
+    },
+    {
+      "app": "qud",
+      "from": "genotype",
+      "to": "chartype",
+      "steps": [
+        {
+          "click_hover": [
+            78,
+            576
+          ],
+          "window": "CavesOfQud",
+          "note": "[Esc] Back"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "chartype"
+      },
+      "timeout": 15
+    },
+    {
+      "app": "qud",
+      "from": "chartype",
+      "to": "game_mode",
+      "steps": [
+        {
+          "click_hover": [
+            78,
+            576
+          ],
+          "window": "CavesOfQud",
+          "note": "[Esc] Back"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "node": "game_mode"
+      },
+      "timeout": 15
     },
     {
       "app": "raves",
@@ -2593,7 +2927,17 @@
         },
         {
           "click_text": "New Game",
-          "window": "Raves of Qud"
+          "window": "Raves of Qud",
+          "os": "posix"
+        },
+        {
+          "click_hover": [
+            958,
+            532
+          ],
+          "window": "Raves of Qud",
+          "note": "coordinates rather than OCR -- see raves title->game_mode",
+          "os": "nt"
         },
         {
           "dismiss": {
@@ -2607,7 +2951,7 @@
         "node": "new_game"
       },
       "timeout": 12,
-      "note": "new_game is the chargen CONTAINER; detection reports the deepest match (game_mode), and assert passes a node that is on the current path, so landing on the first card satisfies this."
+      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || new_game is the chargen CONTAINER; detection reports the deepest match (game_mode), and assert passes a node that is on the current path, so landing on the first card satisfies this."
     },
     {
       "app": "raves",
@@ -2619,14 +2963,23 @@
         },
         {
           "click_text": "Modding Toolkit",
-          "window": "Raves of Qud"
+          "window": "Raves of Qud",
+          "os": "posix"
+        },
+        {
+          "click_hover": [
+            150,
+            902
+          ],
+          "window": "Raves of Qud",
+          "os": "nt"
         }
       ],
       "verify": {
         "scene": "modding_toolkit"
       },
       "timeout": 12,
-      "note": "Raves' Modding Toolkit link is NOT part of the keyboard-first title menu — it is one of the bottom-left LINK_ITEMS, and MainMenu wires it as a mouse-only gui_input that opens the overlay on the click itself. So this edge has no `key space`, unlike every other raves title edge, where a click only moves the selection."
+      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || Windows-viable: the click_text form this carried needs OCR, and ocr() exists only in the darwin backend, so every Raves menu route failed here with 'ocr failed:'. Coordinates work on both, which is why Qud's twin edge already used them. y=902 is MEASURED and is now the SAME as Qud's — the 2026-08-07 title fix lifted Raves' link column one row pitch to match. Raves' Modding Toolkit link is NOT part of the keyboard-first title menu — it is one of the bottom-left LINK_ITEMS, and MainMenu wires it as a mouse-only gui_input that opens the overlay on the click itself. So this edge has no `key space`, unlike every other raves title edge, where a click only moves the selection."
     },
     {
       "app": "raves",
@@ -2635,14 +2988,23 @@
       "steps": [
         {
           "click_text": "Blueprint Browser",
-          "window": "Raves of Qud"
+          "window": "Raves of Qud",
+          "os": "posix"
+        },
+        {
+          "click_hover": [
+            866,
+            537
+          ],
+          "window": "Raves of Qud",
+          "os": "nt"
         }
       ],
       "verify": {
         "scene": "blueprint_browser"
       },
       "timeout": 15,
-      "note": "A toolkit row's own gui_input does `_select(idx)` AND `_activate()`, so the click IS the activation — no Enter. Clicked by LABEL rather than the old recipe's four `down`s plus Enter, which silently depended on Blueprint Browser being the fifth row."
+      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || Windows-viable coordinates: click_text needs OCR and ocr() exists only in the darwin backend, so this edge could not run on Windows at all. Measured and driven live. A toolkit row's own gui_input does `_select(idx)` AND `_activate()`, so the click IS the activation — no Enter. Clicked by LABEL rather than the old recipe's four `down`s plus Enter, which silently depended on Blueprint Browser being the fifth row."
     },
     {
       "app": "raves",
@@ -2927,6 +3289,25 @@
       },
       "timeout": 15,
       "note": "Converted 2026-08-07 after re-measuring. The coordinates were never the problem — they were within 2px — and the clicks always worked; the earlier conversion attempt was driven from a Qud stuck on a stale 'Stage' scene, which invalidated the whole run. map_editor's DETECTOR was the real defect: it named the UI sampler's window ('MapEditorWindow') while the mod reports the legacy view ('MapEditor'), which is the more specific of the two and therefore wins."
+    },
+    {
+      "app": "raves",
+      "from": "modding_toolkit",
+      "to": "map_editor",
+      "steps": [
+        {
+          "click_hover": [
+            866,
+            480
+          ],
+          "window": "Raves of Qud"
+        }
+      ],
+      "verify": {
+        "scene": "map_editor"
+      },
+      "timeout": 15,
+      "note": "Added 2026-08-07: map_editor had inbound edges for QUD only, so nothing in the graph could produce this state for Raves. Coordinate measured and driven live."
     }
   ],
   "tests": [
