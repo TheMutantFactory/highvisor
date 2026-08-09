@@ -958,3 +958,61 @@ different prefix.
 
 `hv drag` / middle-button on darwin, and `loadsave`'s pid-less state read, are Mac-side or shared
 items I have not touched.
+
+---
+
+# SECOND MERGE — Lumpy's answers + chargen carousel, 2026-08-08 (Mac)
+
+`origin/dd/pc-lumpy-merge` merged again into `dd/mac-pc-merge-0808`, both repos. This time there
+were REAL conflicts (the first pass had none): 9 in highvisor's gametree, 5 files in raves.
+
+**A defect in my own first merge, found here.** The raves merge commit `ca4224d` had ONE parent —
+`git stash`, run mid-merge to diff the typing-guard inventory, cleared `MERGE_HEAD`, so the commit
+captured the merged CONTENT with no second parent and git believed 71 of their commits were
+unmerged. Content was verified complete before re-merging (20 files theirs, 21 mine-only, 5 truly
+merged, none missing). Fixed by merging again properly.
+
+## Resolutions
+
+| conflict | taken | why |
+|---|---|---|
+| 7 status-tab notes | **theirs** | their measured explanation replaces my inference |
+| `qud title->game_mode` | **theirs** | `bridge: pick` beats coordinates AND OCR |
+| `fonts.py` | **mine** | the `getattr` fallback is dead once both backends define `qud_install_dir` |
+| `CasteScreen` / `ChargenCardScreen` | **theirs** | mine were byte-identical to their older copies |
+| `MapEditorScreen.gd` | **rebuilt** | their file + the macOS Ctrl+left un-convert re-applied as a patch, so neither side is guessed |
+| both CLAUDE.md gotchas, both doc sections | **both** | additive |
+
+## The letter-key question, settled by measuring HERE
+
+Lumpy's conclusion was right; their reason was not. Measured on macOS, same cell, Raves in 1:1:
+**the letter key `k` opens Skills, AND F2 + tab-click opens Skills.** So 1:1's letter-forwarding is
+NOT "identical on both platforms" — the letters reach `MainFrame` here. The reason to keep one form
+is simply that F2 + tab-click works on both and the letters work on one. Seam removed from all seven
+status edges; the note now carries both machines' measurements.
+
+`bridge: pick` verified on macOS too, so `qud title->new_game` was converted as well. **The os seam
+is now five Raves edges** — all the genuine OCR-vs-coordinates case.
+
+## Gates
+
+| gate | result |
+|---|---|
+| selftests | **4/4** (`cli` sees 49 subcommands — `hv bridge` landed) |
+| SPOT | **5/5** — typing audit, Godot parse, dotnet 0 errors, state-graph render, `--quit-after` |
+| `bridge: pick` on macOS | **works** — drives Qud's title; both converted edges arrive |
+| Map Editor | **works** — ctrl+click paints, middle-click opens the 5-row per-object menu |
+| **B1 Equipment** | **33/33 within ±0.02** (first capture showed the documented uniform +1.43 artefact again; second reproduced — the score-twice rule earning itself) |
+| **B2 item popup** | **7/7 at exactly +0.00** |
+| raves tour | **22/22, 0 EDGE / 0 ENV / 0 REFUSED** — with the collapsed seam |
+| qud tour | **30/31, 1 EDGE** — `title->modding_toolkit` flaked once; the same route then passed twice on retry, and `modding_toolkit` plus the three screens behind it arrived in the same run. Known-flaky coordinate double-click, not a break. |
+
+## Open
+
+- `qud title->modding_toolkit` is a coordinate double-click whose own note says the first click may
+  be eaten by activation. It is the one flaky edge left; `bridge: pick` is the obvious cure and
+  Lumpy owns that command.
+- A pre-existing startup `NullReferenceException` in `Bridge.EnsureScanlineState` (from 2026-07-30,
+  already on main) fires from inside `ThreadTaskQueue.queueTask`. In the one session where it fired,
+  Qud's UI sampler also stalled and the title read `unknown`; in a clean restart neither happened.
+  Correlated at n=1 each — not proven cause and effect. A sampler watchdog now re-arms and logs.
