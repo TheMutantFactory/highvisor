@@ -734,3 +734,62 @@ merge):**
 **Verifiable here in principle, but not yet possible:** the Map Editor per-object context menu — it
 is hung off the middle button, and the Mac backend cannot produce one (§3.1). It becomes Mac-testable
 after Stage H item 2, and not before. Do not record it as failing in the meantime; it is untested.
+
+---
+
+# LUMPY'S ANSWERS — 2026-08-08, the PC
+
+Answering the three "Ask Lumpy" items at the end of the execution log. Measured on this box against
+the merged tree (`origin/main` merged into `dd/pc-lumpy-merge`, both repos, clean, selftests green).
+
+## Q1. "Do the letter-key status edges work now the VK/scancode fix has landed — if so the seam's `nt` half can go?"
+
+**No, and the seam must stay — but every part of the premise turns out to be wrong, including my own
+note in the tree.**
+
+Measured with both apps in-game, Raves in 1:1, from a clean baseline each time:
+
+| key | result |
+|---|---|
+| `f2` | **opens the status overlay** (both delivery paths) |
+| `k` `x` `e` `n` `q` | nothing, via PostMessage **and** via `--focus` |
+| `j` | **raises a PopupMessage in QUD** |
+
+That last row is the answer. The letters are **not** being dropped — `j` reached Qud and fired Qud's
+own binding. **In 1:1 mode Raves FORWARDS letters to Qud**, so they never reach `MainFrame`'s
+handler. This is a routing decision in the app, identical on both platforms, and therefore **not an
+`nt` seam at all**. The F2 + tab-click form is the correct edge on macOS too.
+
+**My note on those eight edges is now STALE and I have corrected it.** It says Raves "does not
+implement Qud's per-screen letter bindings (e/k/x/n/j/q)". It does now — `MainFrame.STATUS_TAB_KEYS`
+maps `k/x/e/n/j/q` plus Tab and I. The bindings exist and are simply unreachable while 1:1 forwards
+the key to Qud first.
+
+Mechanism for the non-focus path, for the record: `windows.py::key` posts a real VK for anything in
+its `VK` table, but a **single printable character goes out as `WM_CHAR`** — a text message carrying
+no virtual-key — so a Godot handler testing `event.keycode` cannot match it. That alone would explain
+F2-works/letters-don't; the `j` result shows it is not the whole story, and the routing is.
+
+## Q2. "How does `apps.*.state_file` resolve on Windows?"
+
+**Verbatim, and it works.** Both entries are literal macOS-shaped paths
+(`~/Library/Application Support/RavesOfQud/{qud,raves}_state.json`). On Windows `expanduser("~")` is
+`C:\Users\danie`, and **both apps really do write to `%USERPROFILE%\Library\Application Support\
+RavesOfQud\`** — the mod's `StartupHook` heartbeat and Raves' `UiState` both build that path rather
+than using `%APPDATA%`. Confirmed live: both files exist and are fresh, and `hv state` resolves
+`via=scene` for both apps on this box. **No seam needed, and none should be added** — the two
+platforms genuinely share one path here.
+
+## Q3. `qud_install_dir()` on the Windows Steam path
+
+Lumpy's install is `C:\Program Files (x86)\Steam\steamapps\common\Caves of Qud\CoQ.exe`, i.e. the
+standard Steam layout with the same `steamapps/common/Caves of Qud` tail the Mac uses under a
+different root. Managed DLLs at `<install>\CoQ_Data\Managed`, game data at
+`<install>\CoQ_Data\StreamingAssets\Base`. Note the shape differs from macOS, where both sit inside
+`CoQ.app/Contents/Resources/Data` — so `plat_win.py`'s implementation cannot be the Mac's with a
+different prefix.
+
+## Not answered
+
+`hv drag` / middle-button on darwin, and `loadsave`'s pid-less state read, are Mac-side or shared
+items I have not touched.
