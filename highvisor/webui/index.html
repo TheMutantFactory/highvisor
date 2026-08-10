@@ -71,6 +71,18 @@
                     title="grant XP (the 'xp:&lt;n&gt;' wish via the Raves bridge) — levels the player for testing mutation/attribute-point flows. Qud must be in-game. Costs one game turn.">✨ Qud: +XP</button>
           </div>
           <div class="layout-row">
+            <input id="cyber-wedges" type="number" value="20" min="1"
+                   title="credit wedges to put in the chest. Credits are ITEMS: the terminal recounts them from your inventory every time it opens (Part.Credits × Count), so this is the only way to have any. An upgrade costs 1 credit at tiers 1-8, 2 at 9-16, 3 at 17-24, 4 at 25+.">
+            <button id="qud-cyberchest" class="full"
+                    title="spawn a chest on an adjacent cell holding EVERY implant blueprint plus a stack of credit wedges. Qud must be in-game with the terminal CLOSED — this runs on the turn-thread path, which a parked screen blocks (the mod will refuse it out loud).">🧰 Qud: cybernetics chest</button>
+          </div>
+          <div class="layout-row">
+            <input id="cyber-licenses" type="number" value="10" min="1"
+                   title="licence TIERS to add. Not an item: `CyberneticsLicenses` is an int property on the player, and Qud's own Upgrade Your License is ModIntProperty(...,1) after it destroys the wedges it charged you. Points Used and Remaining are derived, so they are not settable.">
+            <button id="qud-cyberlicense" class="full"
+                    title="grant cybernetics licence tiers directly, no wedges spent — the same property Qud's upgrade flow increments. Qud must be in-game with the terminal closed.">🎫 Qud: +licence tiers</button>
+          </div>
+          <div class="layout-row">
             <select id="layoutsel"></select>
             <button id="applylayout">apply</button>
           </div>

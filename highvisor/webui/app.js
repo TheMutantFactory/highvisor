@@ -515,6 +515,48 @@ async function qudXp() {
   }
 }
 
+// Cybernetics test fixture. TWO buttons because credits and licence tiers are two
+// different kinds of thing in Qud, and conflating them is the trap: the terminal
+// recounts CREDITS from inventory every time it opens (Part.Credits * GO.Count over
+// CyberneticsCreditWedge), so credits can only come from items — hence a chest — while
+// the licence TIER is a plain int property on the player (`CyberneticsLicenses`), which
+// Qud's own upgrade flow bumps with ModIntProperty(...,1) after destroying the wedges it
+// charged. So one button spawns items and the other sets a number, and neither can do
+// the other's job.
+//
+// Both go through the mod's turn-thread path, which a parked screen blocks — CLOSE the
+// terminal first. The mod refuses them out loud rather than firing late (that guard is
+// why this reports the refusal instead of looking like it worked).
+async function qudCyberChest() {
+  const btn = $("qud-cyberchest");
+  const wedges = parseInt($("cyber-wedges").value || "0", 10);
+  if (!(wedges > 0)) { alert("enter a wedge count"); return; }
+  btn.disabled = true;
+  try {
+    const r = await rpc("qudbridge", { name: "cyberchest", args: { wedges: String(wedges) } });
+    if (!r.ok) alert("cyberchest failed: " + (r.error || "?"));
+  } catch (e) {
+    alert("cyberchest failed: " + (e.message || e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function qudCyberLicense() {
+  const btn = $("qud-cyberlicense");
+  const n = parseInt($("cyber-licenses").value || "0", 10);
+  if (!(n > 0)) { alert("enter a number of licence tiers"); return; }
+  btn.disabled = true;
+  try {
+    const r = await rpc("qudbridge", { name: "cyberlicense", args: { n: String(n) } });
+    if (!r.ok) alert("cyberlicense failed: " + (r.error || "?"));
+  } catch (e) {
+    alert("cyberlicense failed: " + (e.message || e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // Start the latest Raves build and arrange it. Launches via the `raves` launcher
 // (which itself spawns Caves of Qud borderless — see launch.json / QudLauncher),
 // waits for BOTH windows to appear (Qud's takes ~20s), then tiles at 1920×1080.
@@ -1178,6 +1220,8 @@ async function init() {
   $("raves-1to1").onclick = toggleRaves1to1;
   $("qud-godmode").onclick = qudGodmode;
   $("qud-xp").onclick = qudXp;
+  $("qud-cyberchest").onclick = qudCyberChest;
+  $("qud-cyberlicense").onclick = qudCyberLicense;
   $("qud-back").onclick = qudBack;
   $("hv-abort").onclick = async () => {
     try { await rpc("abort_control", {}); } catch (e) { alert("abort failed: " + (e.message || e)); }
