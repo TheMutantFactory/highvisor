@@ -366,3 +366,54 @@ descriptions of the same move is the drift this refactor existed to end. Every n
 keeping was carried into the transitions verbatim. `selftest_plan.py` now fails if a recipe
 reappears for a node the graph can already reach. The fallback **code** stays: adding a recipe
 for a node the graph cannot yet reach must still work.
+
+## The screens with "no way out" (2026-08-09)
+
+Two Qud screens got a reputation for being inescapable, and it was earned honestly: an
+HID Escape, a click, and a second press of the button that opened them all leave the
+**Looker** and the **Book** (an item's "show effects") exactly where they were. So does
+`hv click_text`, since neither carries a caption to aim at. The conclusion drawn from that
+— *this screen has no exit, restart Qud* — cost a session and a save reload.
+
+It was wrong, and the measurement that settles it is one line long:
+
+| exit attempt | Looker | Book |
+|---|---|---|
+| `hv key qud escape --focus` (OS/HID) | no | no |
+| `hv bridge key key=escape` (the mod's LEGACY key queue) | yes | **no** |
+| `hv back` (the mod's `uiback`) | **yes** | **yes** |
+
+The Book row is the interesting one. It looks legacy — `GameManager` pushes the game view
+`Book`, which is what `hv state` reports — but with `Options.ModernUI` on it is the modern
+`BookScreen` window (the sampler reads `window=BookScreen` behind `view=Book`). So it reads
+neither Unity's OS keys nor `ConsoleLib.Console.Keyboard`'s queue, and only the first-party
+cancel reaches it. **A legacy-looking view name is not evidence of a legacy screen; the
+sampled window is.**
+
+`uiback` closes both, by different rungs of its own ladder: the Book through
+`FireInputButtonEvent(CancelButton)`, the Looker through the last rung's queue-injected
+`Cancel` FrameCommand — which works because `Keyboard.metaMousecommands` maps `Meta:Cancel`
+to `Keys.Escape`, and the Looker's `getvk` loop is waiting for exactly that.
+
+### The real gap was the graph, not the exit
+
+Neither screen was a node, so neither had an edge, so `hv goto qud in_game` answered *"the
+only route to in_game RESTARTS qud (it is the cheapest route)"*. CLAUDE.md already says the
+planner picking `restart` is the signal that a real exit edge is missing — this is what it
+looks like when nobody reads the signal. Three things closed it:
+
+- **`look`** (the Looker) and **`book`** are nodes now, so `hv state` names them instead of
+  answering `running · unknown screen`. Neither can be claimed by `in_game`: both park the
+  turn thread, so the mod publishes no snapshot and `game_live` reads false with a live game
+  behind it.
+- One edge, `["look","book"] -> in_game`, one `uiback`. No `exact` on the verify — the Book
+  can be opened from a status screen, so landing there is a legitimate arrival, and
+  `_drive_route` attaches `not_within` to a climbing edge by itself.
+- **`unknown -> in_game`, also one `uiback`** — the part that matters for the screen nobody
+  has modelled yet. Cost 1 against restart's 120, gated on `port_open`, and it cannot lie
+  about arriving: `unknown` is not inside `in_game`, so the default verify is a real check
+  and a failure re-plans onto the restart it would have taken anyway.
+
+Verified live, all three, from the screens themselves: `book -> in_game` and `look ->
+in_game` each one bridge call, and the generic net proved by blinding the Book's detector so
+the screen really was unmatched — `unknown -> in_game (1) [cost 1]`, arrived.

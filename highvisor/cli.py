@@ -1144,7 +1144,10 @@ def build_parser():
     s.add_argument("name", nargs="+", help="the save's character name, exactly as the picker shows it")
     s.set_defaults(fn=_cmd_loadsave)
 
-    s = sub.add_parser("back", help="close/back out of Qud's current modern menu (first-party uiback)")
+    s = sub.add_parser("back", help="close/back out of WHATEVER screen Qud is on (first-party uiback):\n"
+                                    "modern menus, and also the Book and the Looker, which ignore every\n"
+                                    "OS key AND the mod's legacy key queue. Reach for this before a restart\n"
+                                    "any time `hv state` says Qud is on an unknown screen")
     s.set_defaults(fn=lambda a: _print_json(_call({"op": P.OP_QUDBACK})))
     s = sub.add_parser("quit", help="stop an app and leave it stopped (TERM; --force for KILL)")
     s.add_argument("app", help="qud | raves")

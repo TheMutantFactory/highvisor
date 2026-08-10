@@ -281,6 +281,22 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   HID-sourced or not. Exit them with the mod's first-party `uiback` bridge command
   (gametree `{"bridge": "uiback"}` step / `{"dismiss": {..., "bridge": "uiback"}}`),
   never key injection. Clicks DO land (warp + HID button pair).
+- **`hv back` is the FIRST thing to try on any Qud screen, including the ones that look
+  legacy** (2026-08-09). The Book (an item's "show effects") and the Looker each survived
+  an HID Escape, a click, and a second press of the button that opened them — and the Book
+  also survived the mod's LEGACY key queue (`hv bridge key key=escape`), because it is a
+  modern `BookScreen` window wearing the legacy view name `Book`. `uiback` closes both, by
+  different rungs of its own ladder. A session was lost concluding "there is no way out of
+  this screen" from the OS-level attempts alone and restarting Qud; the one first-party
+  command was never tried. **When `hv state` says `running · unknown screen`, `hv back`
+  before anything else.**
+- **The planner reaching for `restart` is a BUG REPORT, and now it is acted on.** An
+  unmodelled Qud screen had no edges, so `hv goto qud in_game` answered "the only route
+  RESTARTS qud". There is now a `qud unknown -> in_game` edge that spends one `uiback`
+  first (cost 1 against restart's 120); it verifies its own arrival, so if the screen does
+  not close the planner falls back to the restart it would have taken anyway. `look`
+  (Looker) and `book` are real nodes with their own exits — so `hv state` names them
+  instead of shrugging.
 - **Qud's CHARGEN screens ignore the mod's own push APIs too, and that is the deeper
   version of the rule above.** `Keyboard.PushCommand`/`PushMouseEvent` feed the LEGACY
   console queue; the chargen module windows are modern `Qud.UI` windows that do not read

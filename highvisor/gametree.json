@@ -882,7 +882,30 @@
               "qud": 1.0,
               "raves": 0.2
             },
-            "detect": {}
+            "detect": {
+              "qud": [
+                {
+                  "scene": "Looker",
+                  "note": "Qud's LOOKER, a legacy console screen (ShowLooker loops on Keyboard.getvk). It reported `scene=Looker` and matched NO node, so `hv state` said 'running · unknown screen' and the planner's only route out was the `*`->title restart -- exactly the signal CLAUDE.md calls out as a missing exit edge. It also parks the turn thread, so the mod publishes no snapshot and `game_live` reads FALSE with a live game behind it: in_game cannot claim this one, which is why it needs a node of its own."
+                }
+              ]
+            }
+          },
+          {
+            "id": "book",
+            "label": "Book / long text screen",
+            "done": {
+              "qud": 1.0,
+              "raves": 0.0
+            },
+            "detect": {
+              "qud": [
+                {
+                  "scene": "Book",
+                  "note": "Qud's BOOK view -- an item's 'show effects', a read book, any long text. With Options.ModernUI on it is the MODERN `BookScreen` window pushed under the game view name `Book` (measured: window=BookScreen, view=Book), so it ignores OS-synthesized keys AND the mod's legacy key queue; `uiback` is what closes it. Like the Looker it blocks the turn thread, so game_live is false while a game is running and in_game's own detector cannot see it."
+                }
+              ]
+            }
           },
           {
             "id": "direction_pick",
@@ -1525,6 +1548,36 @@
       },
       "timeout": 12,
       "note": "uiback closes it -- measured. `exact` on the verify because control_mapping is a CHILD of in_game, so the default tolerance (landing deeper is fine) would be satisfied by the very screen this edge exists to LEAVE."
+    },
+    {
+      "app": "qud",
+      "from": [
+        "look",
+        "book"
+      ],
+      "to": "in_game",
+      "steps": [
+        {
+          "bridge": "uiback"
+        }
+      ],
+      "timeout": 12,
+      "note": "MEASURED 2026-08-09, both screens, after a session lost to the belief that neither had an exit. Everything OS-level fails on them -- an HID Escape left the Book up, and so did `hv click` and a second press of the button that opened it. So does the mod's LEGACY key queue (`bridge key key=escape`), which is the surprise: the Book is a MODERN window (BookScreen) wearing a legacy view name, so it reads neither. `uiback` closes both, by different rungs of its own ladder -- the Book through `FireInputButtonEvent(CancelButton)`, the Looker through the last rung's queue-injected Cancel, which `Keyboard.metaMousecommands` maps 'Meta:Cancel' -> Keys.Escape and the getvk loop reads as the Escape it is waiting for. No `exact` needed: both are children of in_game, and _drive_route attaches `not_within` to a climbing edge by itself. Landing on a status screen (the Book can be opened from one) is a legitimate arrival, which is why `exact` would be WRONG here even though control_mapping wants it."
+    },
+    {
+      "app": "qud",
+      "from": "unknown",
+      "to": "in_game",
+      "steps": [
+        {
+          "bridge": "uiback"
+        }
+      ],
+      "requires": {
+        "port_open": true
+      },
+      "timeout": 12,
+      "note": "THE SAFETY NET, and the actual lesson of the Book. Both screens above are nodes now, but the failure was never really about those two: an unmodelled Qud screen has no edges, so the planner's only route was the `*`->title RESTART -- which CLAUDE.md already names as the signal that a real exit is missing, and which cost a save reload to obey. Qud's screens overwhelmingly close on their own first-party cancel, so trying that BEFORE reaching for a restart is right for the next unmodelled screen too, and it costs 1 against the restart's 120. `port_open` because a bridge command means nothing without the mod. It cannot lie about arriving: `unknown` is not inside in_game, so the default verify is a real check -- if uiback closes nothing we are still unmatched and the planner re-plans onto the restart it would have taken anyway."
     },
     {
       "app": "qud",
