@@ -155,9 +155,15 @@
                     "label": "Select Character Option",
                     "done": {
                       "qud": 0.7,
-                      "raves": 0.0
+                      "raves": 0.5
                     },
                     "detect": {
+                      "raves": [
+                        {
+                          "scene": "chargen_chartype",
+                          "note": "Raves' chartype slice (2026-08-10): the five Qud cards between game mode and genotype. Only New continues inside Raves; the other four show a first-party notice."
+                        }
+                      ],
                       "qud": [
                         {
                           "scene": "QudChartypeModuleWindow"
