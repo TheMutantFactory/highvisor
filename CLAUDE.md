@@ -297,6 +297,18 @@ that way. Guarded by `tools/selftest_evaluate.py`.
   not close the planner falls back to the restart it would have taken anyway. `look`
   (Looker) and `book` are real nodes with their own exits — so `hv state` names them
   instead of shrugging.
+- **A MISSING NODE DOES NOT ALWAYS ANNOUNCE ITSELF AS `unknown`** (2026-08-10, the
+  cybernetics terminal). `look`/`book` were easy to spot because Qud fell all the way to
+  "running · unknown screen". The becoming-nook terminal did not: it parks the turn thread
+  the same way, but the heartbeat kept `game_live` true, so Qud matched plain `in_game` at
+  depth 1 `via=live` and `hv state` reported a perfectly ordinary in-game — while a modal
+  terminal was up and every in-game affordance was unavailable. Nothing looked wrong on that
+  side. The only thing that flagged it was RAVES, which mirrors the screen, reported its own
+  `scene=cyber_terminal`, matched nothing, and planned a 143-cost restart to get out of it.
+  Two consequences worth keeping: a `via=live` in_game is the WEAKEST way to arrive at that
+  node and says nothing about what is drawn on top of it; and the second app is a detector
+  for the first — when only one of a mirrored pair says `unknown`, the bug is a missing node,
+  not a Raves problem. `hv state` naming a screen is not evidence the tree MODELS it.
 - **Qud's CHARGEN screens ignore the mod's own push APIs too, and that is the deeper
   version of the rule above.** `Keyboard.PushCommand`/`PushMouseEvent` feed the LEGACY
   console queue; the chargen module windows are modern `Qud.UI` windows that do not read

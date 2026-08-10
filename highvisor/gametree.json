@@ -914,6 +914,28 @@
             }
           },
           {
+            "id": "cyber_terminal",
+            "label": "Cybernetics Terminal (becoming nook)",
+            "done": {
+              "qud": 1.0,
+              "raves": 0.8
+            },
+            "detect": {
+              "qud": [
+                {
+                  "scene": "CyberneticsTerminalScreen",
+                  "note": "Qud's becoming-nook terminal. Unlike look/book this one did NOT read as `unknown` on the qud side -- it parks the turn thread like they do, but the heartbeat kept `game_live` true, so qud matched plain `in_game` at depth 1 `via=live` and the terminal was invisible in `hv state` without ever looking broken. A node here wins on depth and names it."
+                }
+              ],
+              "raves": [
+                {
+                  "scene": "cyber_terminal",
+                  "note": "Raves MIRRORS the terminal (CyberOverlay) and has reported this scene since the mirror landed, but no node claimed the string, so `hv state` said 'running - unknown screen' while Raves was drawing the screen correctly -- and `hv goto raves in_game` planned a RESTART (cost 143) as its only route. The scene name is Raves' own UiState value, not a translation of Qud's."
+                }
+              ]
+            }
+          },
+          {
             "id": "direction_pick",
             "label": "Direction Picker",
             "done": {
@@ -1569,6 +1591,42 @@
       ],
       "timeout": 12,
       "note": "MEASURED 2026-08-09, both screens, after a session lost to the belief that neither had an exit. Everything OS-level fails on them -- an HID Escape left the Book up, and so did `hv click` and a second press of the button that opened it. So does the mod's LEGACY key queue (`bridge key key=escape`), which is the surprise: the Book is a MODERN window (BookScreen) wearing a legacy view name, so it reads neither. `uiback` closes both, by different rungs of its own ladder -- the Book through `FireInputButtonEvent(CancelButton)`, the Looker through the last rung's queue-injected Cancel, which `Keyboard.metaMousecommands` maps 'Meta:Cancel' -> Keys.Escape and the getvk loop reads as the Escape it is waiting for. No `exact` needed: both are children of in_game, and _drive_route attaches `not_within` to a climbing edge by itself. Landing on a status screen (the Book can be opened from one) is a legitimate arrival, which is why `exact` would be WRONG here even though control_mapping wants it."
+    },
+    {
+      "app": "qud",
+      "from": "cyber_terminal",
+      "to": "in_game",
+      "steps": [
+        {
+          "bridge": "cyber",
+          "args": {
+            "action": "quit"
+          }
+        }
+      ],
+      "requires": {
+        "port_open": true
+      },
+      "timeout": 12,
+      "note": "The terminal is ONE CHANNEL all the way down, so it exits through its own mirror command rather than the generic uiback: `cyber action=quit` marshals onto the uiQueue and calls the live CyberneticsTerminalScreen's own Exit(). That closes the whole screen from any depth -- verified from the Upgrade Your License SUB-menu, not just the root -- which matters because a back-one-level exit would satisfy nothing and leave the route to loop. No `exact` on the verify: this is a climbing edge (cyber_terminal is inside in_game) and _drive_route attaches `not_within` itself."
+    },
+    {
+      "app": "raves",
+      "from": "cyber_terminal",
+      "to": "in_game",
+      "steps": [
+        {
+          "bridge": "cyber",
+          "args": {
+            "action": "quit"
+          }
+        }
+      ],
+      "requires": {
+        "port_open": true
+      },
+      "timeout": 12,
+      "note": "The RAVES edge sends the same command to the same mod, and that is not a copy-paste slip: Raves does not own this screen, it mirrors it. The overlay closes when Qud's does, so the only way for Raves to leave is to close Qud's terminal -- exactly what Raves' own quit button does (CyberOverlay emits {action:quit} onto this command). Without this edge Raves' single route out was `unknown -> title` via RESTART, cost 143, over a live game."
     },
     {
       "app": "qud",
