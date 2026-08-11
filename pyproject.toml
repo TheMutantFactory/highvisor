@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "A local supervisor for the desktop UI layer: observe and control native apps over a small, brain-agnostic RPC."
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "DazzlingDukeOfLazers" }]
+authors = [{ name = "Mutant Factory" }]
 license = { text = "MIT" }
 dependencies = [
     "pillow>=9",
