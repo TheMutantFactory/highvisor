@@ -38,7 +38,7 @@ FIXTURES = [
     # --- traps that must NOT classify ---
     (("raves-of-qud - Godot Engine", "Godot", ""), None),       # the Godot EDITOR
     (("raves-of-qud - Godot Engine", "Engine", ""), None),      # editor, Windows class
-    (("DazzlingDukeOfLazers/raves-of-qud: a Godot viewer - Chrome",
+    (("TheMutantFactory/raves-of-qud: a Godot viewer - Chrome",
       "Chrome_WidgetWin_1", ""), None),                         # browser tab
     (("MINGW64:/c/Users/danie/personal-git/raves-of-qud", "mintty", ""), None),
     (("Caves of Qud Wiki - Chrome", "Chrome_WidgetWin_1", ""), None),

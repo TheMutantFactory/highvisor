@@ -110,5 +110,5 @@ you can verify hover/click states over the same RPC without stealing focus. Deta
 
 [`docs/`](docs/) has the full design, numbered `00`–`09` (start at [`00-overview.md`](docs/00-overview.md)
 for the task-oriented map). highvisor generalizes the per-project debug loop first built for
-[raves-of-qud](https://github.com/DazzlingDukeOfLazers/raves-of-qud) (a Godot viewer for Caves of Qud) into
+[raves-of-qud](https://github.com/TheMutantFactory/raves-of-qud) (a Godot viewer for Caves of Qud) into
 one reusable service.
