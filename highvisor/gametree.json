@@ -2457,7 +2457,8 @@
       "verify": {
         "node": "title"
       },
-      "timeout": 10
+      "timeout": 10,
+      "note": "Escape CANCELS, verified live -- it does not take the preselected '> Yes'. Kept as a key rather than a click on 'No': a missed OCR match here would not fail cleanly, and one of the things it could hit is Yes."
     },
     {
       "app": "raves",
@@ -3425,6 +3426,51 @@
       },
       "timeout": 15,
       "note": "Added 2026-08-07: map_editor had inbound edges for QUD only, so nothing in the graph could produce this state for Raves. Coordinate measured and driven live."
+    },
+    {
+      "app": "qud",
+      "from": "quit_dialog",
+      "to": "title",
+      "steps": [
+        {
+          "activate": "CavesOfQud"
+        },
+        {
+          "key": "Escape",
+          "window": "CavesOfQud"
+        },
+        {
+          "sleep": 0.6
+        }
+      ],
+      "verify": {
+        "scene": "MainMenu"
+      },
+      "timeout": 30,
+      "note": "KEPT even though nothing routes IN. A state the harness can end up in by other means must always be leavable -- that half is cheap and it is the half that strands a session when missing. See UNROUTABLE in tools/selftest_plan.py for why the entry edge was removed."
+    },
+    {
+      "app": "raves",
+      "from": "title",
+      "to": "quit_dialog",
+      "steps": [
+        {
+          "activate": "Raves of Qud"
+        },
+        {
+          "key": "Escape",
+          "window": "Raves of Qud"
+        },
+        {
+          "sleep": 0.8
+        }
+      ],
+      "verify": {
+        "scene": "quit_dialog"
+      },
+      "timeout": 30,
+      "cost": 200,
+      "note": "ESCAPE, NOT A CLICK. Raves' title menu has no Quit ITEM -- it is New Game / Continue / Records / Options / Mods, and quitting is '[Esc] quit' in the hint bar. A click_text:'Quit' edge therefore matched nothing, and because a missed OCR match does not fail cleanly the goto simply reported title and looked like a flaky click. Verified 2026-08-11: Escape raises the confirm; Escape again cancels it, even though '> Yes' is the preselected option."
     }
   ],
   "tests": [

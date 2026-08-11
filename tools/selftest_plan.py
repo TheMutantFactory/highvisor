@@ -321,6 +321,132 @@ def real():
           "no step carries an `os` field -- this check proves nothing")
     print("  ...%d edges carry per-os steps" % seamed)
 
+    _reachability(tree, apps)
+
+
+# States we can RECOGNISE but deliberately cannot ROUTE TO, each with the reason. An entry here is
+# a decision on the record; a node missing from both this list and the transition table is an
+# oversight, which is exactly what the check below is for.
+#
+# The bar for being listed: reaching the state requires something the harness cannot manufacture on
+# demand -- a specific object in the world, or the game ending. "Nobody got round to it" is not a
+# reason and belongs in the failure output instead.
+# A value may be a STRING (unroutable for every app) or a {app: reason} DICT, because the same
+# state can be reachable in one app and not the other -- Raves opens its quit confirm on Escape,
+# Qud ignores every input channel the harness has.
+UNROUTABLE = {
+    "look": "needs an object worth looking at in the current zone; the Looker opens ON a target",
+    "book": "needs a book in reach -- the state is a property of the world, not of the UI",
+    "stranded_stage": "the post-death stage; reaching it deliberately means killing the character",
+    "summary": "end-of-run summary, same objection as stranded_stage",
+    "me_context_menu": "map-editor right-click menu, anchored to whatever is under the cursor",
+    "cyber_terminal": (
+        "opens by USING a cybernetics terminal object -- a becoming nook or a cybernetics rack -- "
+        "so reaching it needs one within reach in the current zone, same objection as `book`. Its "
+        "EXITS are wired (both apps), which is the half that matters: a state the harness can land "
+        "in by playing must always be leavable."),
+    "quit_dialog": {"qud": (
+        "QUD ONLY -- Raves reaches this on Escape and round-trips (verified 2026-08-11). Qud's "
+        "title has no Quit ITEM (the menu is New Game / Continue / Records / Options / Mods), and "
+        "its confirm answered NONE of the channels we have: synthesized Escape, a click on the "
+        "corner X, and the mod's own uiback all left it on TitleScreen. Wiring an edge that cannot "
+        "fire is worse than none -- the planner routes into it and reports success on arrival at "
+        "the wrong state.")},
+}
+
+
+# WIRABLE, JUST NOT WIRED. Distinct from UNROUTABLE on purpose: these are states the harness could
+# reach with an edge someone has not written yet. They are REPORTED EVERY RUN and do not fail the
+# suite, because a permanently red check gets ignored and then stops catching the thing it is for.
+# A NEW orphan still fails. Empty this list by wiring edges, not by moving entries into UNROUTABLE.
+UNWIRED = {
+    ("qud", "control_mapping"): "reachable via Qud's system menu -> Control Mapping; only the raves edge exists",
+    ("qud", "blueprint_browser"): "only the raves edge exists; confirm Qud has a drivable equivalent before wiring",
+    ("raves", "chartype"): "qud reaches it from game_mode and genotype; raves' chargen has no edge yet",
+}
+
+
+def _unroutable_for(app):
+    """The allowlisted node ids for one app."""
+    out = set()
+    for node, why in UNROUTABLE.items():
+        if isinstance(why, dict):
+            if app in why:
+                out.add(node)
+        else:
+            out.add(node)
+    return out
+
+
+def _reachability(tree, apps):
+    """Every DETECTABLE state should be routable to, or say why not.
+
+    A node with detect rules and no inbound transition is half-wired: `hv state` will happily
+    report you are in it, `hv goto` answers 'no transition ENTERS', and every selftest passes.
+    That combination is worse than an absent node, because the tree claims coverage it does not
+    have -- found on 2026-08-10 when `cyber_terminal` had been given exits and no entrance, and
+    four green selftests said nothing.
+    """
+    # Inbound is per-APP: an edge is only a way in for the app that owns it. A shared set would
+    # let one app's wiring vouch for the other's, which is the mistake the qud/raves quit_dialog
+    # split exists to catch.
+    inbound = {app: set() for app in apps}
+    for tr in tree.get("transitions") or []:
+        for n in _spec_nodes(tr.get("to")):
+            for app in ([tr["app"]] if tr.get("app") in inbound else apps):
+                inbound[app].add(n)
+
+    # A CONTAINER IS REACHED THROUGH ITS CHILDREN. `status_screens` has no inbound edge of its own
+    # in raves and never needs one: every route goes to status_equipment or a sibling, and arriving
+    # at a child means you are in the parent. Counting only direct edges called that an orphan.
+    kids = {}
+
+    def index(n):
+        ids = [c["id"] for c in (n.get("children") or []) if c.get("id")]
+        if n.get("id"):
+            kids[n["id"]] = ids
+        for c in n.get("children") or []:
+            index(c)
+
+    index(tree["root"])
+
+    def reachable(app, nid, seen=None):
+        seen = seen or set()
+        if nid in inbound[app]:
+            return True
+        if nid in seen:
+            return False
+        seen.add(nid)
+        return any(reachable(app, k, seen) for k in kids.get(nid, []))
+
+    for app in apps:
+        orphans = sorted(n for n in _detectable(tree, app)
+                         if not reachable(app, n)
+                         and n not in _unroutable_for(app)
+                         and (app, n) not in UNWIRED)
+        check("every detectable %s state can be routed to" % app, not orphans,
+              "no transition ENTERS: %s -- wire one, or record it in UNWIRED / UNROUTABLE"
+              % ", ".join(orphans))
+
+    todo = sorted((a, n) for (a, n) in UNWIRED if not reachable(a, n))
+    if todo:
+        print("  ..%d state(s) WIRABLE BUT UNWIRED (reported, not failed):" % len(todo))
+        for a, n in todo:
+            print("      %-6s %-20s %s" % (a, n, UNWIRED[(a, n)]))
+    fixed = sorted("%s/%s" % (a, n) for (a, n) in UNWIRED if reachable(a, n))
+    check("no stale UNWIRED entries", not fixed,
+          "now routable, drop from UNWIRED: %s" % ", ".join(fixed))
+
+    # ...and the allowlist has to stay honest in the other direction too: an entry that IS now
+    # routable is stale, and a stale exemption quietly re-hides the next real orphan.
+    stale = sorted("%s/%s" % (app, n) for app in apps
+                   for n in _unroutable_for(app) if n in inbound[app])  # direct edge only
+    check("no stale UNROUTABLE entries", not stale,
+          "now routable, drop from UNROUTABLE: %s" % ", ".join(stale))
+
+    unknown = sorted(n for n in UNROUTABLE if n not in set(plan.node_ids(tree)))
+    check("UNROUTABLE names real states", not unknown, "not in the tree: %s" % ", ".join(unknown))
+
 
 def _spec_nodes(spec):
     if isinstance(spec, dict):
