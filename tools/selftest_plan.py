@@ -345,13 +345,6 @@ UNROUTABLE = {
         "so reaching it needs one within reach in the current zone, same objection as `book`. Its "
         "EXITS are wired (both apps), which is the half that matters: a state the harness can land "
         "in by playing must always be leavable."),
-    "quit_dialog": {"qud": (
-        "QUD ONLY -- Raves reaches this on Escape and round-trips (verified 2026-08-11). Qud's "
-        "title has no Quit ITEM (the menu is New Game / Continue / Records / Options / Mods), and "
-        "its confirm answered NONE of the channels we have: synthesized Escape, a click on the "
-        "corner X, and the mod's own uiback all left it on TitleScreen. Wiring an edge that cannot "
-        "fire is worse than none -- the planner routes into it and reports success on arrival at "
-        "the wrong state.")},
 }
 
 
@@ -363,6 +356,11 @@ UNWIRED = {
     ("qud", "control_mapping"): "reachable via Qud's system menu -> Control Mapping; only the raves edge exists",
     ("qud", "blueprint_browser"): "only the raves edge exists; confirm Qud has a drivable equivalent before wiring",
     ("raves", "chartype"): "qud reaches it from game_mode and genotype; raves' chargen has no edge yet",
+    ("qud", "quit_dialog"): (
+        "the title's corner X at (50,48) as click_hover DOES raise it -- once. A second identical "
+        "call left Qud on TitleScreen, so the actuation is not repeatable and an intermittent edge "
+        "is worse than none: goto reports failure on a state the app is sometimes actually in. "
+        "Raves reaches its own on Escape and round-trips. Needs a reliable actuation, not a note."),
 }
 
 

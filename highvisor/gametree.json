@@ -760,8 +760,7 @@
               "qud": {
                 "ocr_any": [
                   "are you sure you want to quit"
-                ],
-                "game_live": false
+                ]
               },
               "raves": [
                 {
@@ -773,7 +772,8 @@
                   ]
                 }
               ]
-            }
+            },
+            "_detect_note": "KEEP THE POSITIVE, DROP THE NEGATIVE. This carried {'game_live': false} beside the OCR, and that is the anti-pattern CLAUDE.md names: absence of bytes is not evidence. Measured 2026-08-11 -- Qud's quit confirm was plainly on screen while the bridge still reported a live game, so the AND failed and the state read as plain in_game with a DynamicPopupMessage. The OCR string is a sound positive on its own; the in-game quit confirm is the same dialog and matching it is correct, not a false hit."
           }
         ]
       },
@@ -3440,7 +3440,7 @@
           "window": "CavesOfQud"
         },
         {
-          "sleep": 0.6
+          "sleep": 0.8
         }
       ],
       "verify": {
