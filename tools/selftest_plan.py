@@ -355,7 +355,6 @@ UNROUTABLE = {
 UNWIRED = {
     ("qud", "control_mapping"): "reachable via Qud's system menu -> Control Mapping; only the raves edge exists",
     ("qud", "blueprint_browser"): "only the raves edge exists; confirm Qud has a drivable equivalent before wiring",
-    ("raves", "chartype"): "qud reaches it from game_mode and genotype; raves' chargen has no edge yet",
     ("qud", "quit_dialog"): (
         "the title's corner X at (50,48) as click_hover DOES raise it -- once. A second identical "
         "call left Qud on TitleScreen, so the actuation is not repeatable and an intermittent edge "

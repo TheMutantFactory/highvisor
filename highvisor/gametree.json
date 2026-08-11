@@ -2499,7 +2499,7 @@
     {
       "app": "raves",
       "from": "game_mode",
-      "to": "genotype",
+      "to": "chartype",
       "steps": [
         {
           "hover": [
@@ -2513,6 +2513,30 @@
           "key": "enter",
           "window": "Raves of Qud",
           "note": "confirm the now-hovered Classic card"
+        }
+      ],
+      "verify": {
+        "scene": "chargen_chartype"
+      },
+      "timeout": 10
+    },
+    {
+      "app": "raves",
+      "from": "chartype",
+      "to": "genotype",
+      "steps": [
+        {
+          "hover": [
+            840,
+            563
+          ],
+          "window": "Raves of Qud",
+          "note": "'New' [B] -- build a character from scratch, as against Presets/Random/Library/Last, and the ONLY card of the five that leads to Choose Genotype. Same 120px pitch centred at x=960 as the game_mode row, so index 1 of 5 is x=840 again; the coincidence is why this gap hid for so long, because the edge before this one hovered the same point and its verify simply named the wrong screen."
+        },
+        {
+          "key": "enter",
+          "window": "Raves of Qud",
+          "note": "confirm the now-hovered New card"
         }
       ],
       "verify": {
