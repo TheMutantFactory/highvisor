@@ -1032,7 +1032,10 @@ def build_parser():
                    help="middle-click (Qud's Map Editor hangs commands off it)")
     s.add_argument("--double", action="store_true", help="double-click")
     s.add_argument("--hover", action="store_true",
-                   help="post a real mouseMoved first (needed for Qud's legacy popups)")
+                   help="post a real mouseMoved first — needed for Qud's legacy popups, but it "
+                        "BREAKS world-cell clicks: Raves' 3D pick then reports the same stale "
+                        "cell for every position, which reads as a broken pick ray. Leave it "
+                        "off unless the plain click is ignored.")
     s.add_argument("--mod", default=None, metavar="ctrl+alt+shift",
                    help="modifiers HELD across the click (Qud's Map Editor: "
                         "ctrl=paint from palette, alt=sample to palette)")
