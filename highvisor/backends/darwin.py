@@ -510,9 +510,13 @@ class MacBackend(PlatformBackend):
         else:
             Quartz.CGWarpMouseCursorPosition(pt)
             time.sleep(0.03)
-        # Modifier-clicks (Cmd+Right-click = Raves' element-feedback gesture): set the flag on the
-        # MOUSE events themselves. Flags-only is enough for Godot -- it reads event.meta_pressed off
-        # the click -- and avoids the stuck-modifier class of bug entirely (nothing is ever held).
+        # Modifier-clicks (Ctrl+click = Raves' cell inspector, Cmd+Right-click = its element
+        # feedback): BOTH the flag on the mouse events AND the real key HELD around them, which
+        # is what the body below does. This comment used to claim flags-only was enough for
+        # Godot and that nothing is ever held -- it is not, and it was not: measured, Ctrl+click
+        # never fired the inspector on flags alone while unmodified clicks worked perfectly, and
+        # the wrong comment outlived the fix. Same finding as the wheel in `scroll`. Holding a
+        # real key is the stuck-modifier bug class, hence the `finally` and the pre-clear.
         flags = self._mod_flags(modifiers)
         # a stuck HID modifier (see _clear_stuck_mods) rides on mouse events too -- a plain
         # left click would arrive as Cmd+click. Clear anything we didn't ask for.
@@ -546,7 +550,7 @@ class MacBackend(PlatformBackend):
 
         Same shape as `click`: warp the real cursor first (the wheel goes to whatever is under
         it, and Unity/Godot read the actual position), HID source and HID tap, and the modifier
-        as a FLAG on the event rather than a held key — nothing to get stuck.
+        both flagged on the event and really HELD -- see the measurement in the body.
 
         `dy` is in LINES, positive = wheel-up/away. macOS reports line units as the coarse,
         universally-understood unit; pixel units would need a device profile to mean anything.
@@ -571,8 +575,8 @@ class MacBackend(PlatformBackend):
         # MEASURED: flags alone are NOT enough for a modified WHEEL. Setting
         # kCGEventFlagMaskControl on the scroll event and posting it gets the wheel through to
         # Godot with ctrl_pressed FALSE — Raves' Ctrl+wheel panel never opened, while a plain
-        # wheel zoomed the camera every time. (The flags-only trick documented on `click` is a
-        # different path and stays as it is; do not "unify" them without re-measuring.)
+        # wheel zoomed the camera every time. (`click` needs the same treatment and has
+        # it; the note there long claimed otherwise, which is why this one shows its working.)
         #
         # So for scroll we hold the REAL modifier around the event, which produces genuine
         # hardware modifier state. That is the stuck-modifier bug class the repo lost a day to,
