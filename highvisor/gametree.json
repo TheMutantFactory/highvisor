@@ -2093,7 +2093,8 @@
       "to": "title",
       "steps": [
         {
-          "launch": "raves_solo"
+          "launch": "raves_user",
+          "note": "raves_USER, not raves_solo. Both are solo -- neither spawns a Qud -- but raves_solo passes --one-to-one, which locks parity mode for the whole run via Settings.one_to_one_only. That is a RUNTIME flag, so the app reports mode=1to1 while its own settings.json still says \"user\", which is exactly how it goes unnoticed. Bringing a dead app back up is recovery, and recovery must not change what the app IS: a 1:1 Raves renders no neighbour zones and returns early from ZoneRenderer._build_darkness, so every appearance measurement taken on it is silently void. That cost most of a session's lighting work twice (2026-08-17). Ask for 1:1 deliberately with `hv launch raves_solo`."
         },
         {
           "wait_window": "Raves of Qud",

@@ -25,7 +25,16 @@ PROFILES = {
     "raves": {
         "window": "Raves of Qud",
         "proc": "RavesOfQud",
-        "launcher": "raves_solo",
+        # raves_USER, not raves_solo. Both are solo (neither spawns a Qud), but raves_solo passes
+        # --one-to-one, which LOCKS parity mode for the run through Settings.one_to_one_only — a
+        # runtime flag, so the app reports mode=1to1 while its settings.json still says "user".
+        # A restart is recovery, and recovery must not silently change what the app IS. The
+        # `* -> title` edge in gametree.json restarts raves, so `hv goto raves in_game` after any
+        # crash used to hand back a 1:1 app: no neighbour zones, ZoneRenderer._build_darkness
+        # returning immediately, and every appearance measurement taken on it quietly worthless.
+        # That cost most of a session's lighting work, twice. Ask for 1:1 explicitly with
+        # `hv launch raves_solo` when you want the parity pressure valve.
+        "launcher": "raves_user",
     },
 }
 
