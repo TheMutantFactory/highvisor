@@ -1469,6 +1469,13 @@
             "cmd": "python3 tools/regression/typing_guard_audit.py",
             "cwd": "raves-of-qud",
             "note": "STATIC, ~0.2s, no apps. Fails if a keyboard hotkey is dispatched from _input without TypingGuard, and prints the text-field inventory so a NEW field shows in the diff. Live counterpart is the FULL case in docs/testing.md."
+          },
+          {
+            "id": "qud_shape_seam",
+            "tier": "spot",
+            "cmd": "python3 tools/regression/qud_shape_audit.py",
+            "cwd": "raves-of-qud",
+            "note": "STATIC, no apps. Fails when a BARE Settings.qud_shape() guards a branch with an else -- that else is unreachable in BOTH modes, because user mode renders as a 1:1 clone and the bare gate can never be false there. Three features were lost to exactly this (the message log's grouping toggle, Nearby's larger icons, row 4's user-mode heights) and each read as a deleted feature when it was really an unreachable one. Fix by naming a QoL feature -- qud_shape(\"<feature>\") -- or by stating the decision with a # QUD-SHAPE-OK: <reason>."
           }
         ]
       },
