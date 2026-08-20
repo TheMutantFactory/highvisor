@@ -547,6 +547,19 @@ async function qudCyberChest() {
 // pick a zone up. This packs them into one Chest at your feet with enough spheres of negative
 // weight to cancel the load; the mod computes that count off the Suspensor part rather than
 // guessing. Same turn-thread path as the cybernetics chest, so the same rule: no parked screen.
+async function qudIdentifyAll() {
+  const btn = $("qud-identifyall");
+  btn.disabled = true;
+  try {
+    const r = await rpc("qudbridge", { name: "identifyall", args: {} });
+    if (!r.ok) alert("identify failed: " + (r.error || "?"));
+  } catch (e) {
+    alert("identify failed: " + (e.message || e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function qudLoadout() {
   const btn = $("qud-loadout");
   btn.disabled = true;
@@ -1240,6 +1253,7 @@ async function init() {
   $("qud-xp").onclick = qudXp;
   $("qud-cyberchest").onclick = qudCyberChest;
   $("qud-loadout").onclick = qudLoadout;
+  $("qud-identifyall").onclick = qudIdentifyAll;
   $("qud-cyberlicense").onclick = qudCyberLicense;
   $("qud-back").onclick = qudBack;
   $("hv-abort").onclick = async () => {
