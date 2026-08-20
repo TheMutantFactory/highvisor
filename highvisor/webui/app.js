@@ -542,6 +542,24 @@ async function qudCyberChest() {
   }
 }
 
+// A CHEST OF EVERY WEAPON AND EVERY AMMO, carryable. `zoo weapons` scatters one of each
+// across the zone, which is right for looking at art and useless for equipping — you cannot
+// pick a zone up. This packs them into one Chest at your feet with enough spheres of negative
+// weight to cancel the load; the mod computes that count off the Suspensor part rather than
+// guessing. Same turn-thread path as the cybernetics chest, so the same rule: no parked screen.
+async function qudLoadout() {
+  const btn = $("qud-loadout");
+  btn.disabled = true;
+  try {
+    const r = await rpc("qudbridge", { name: "loadout", args: {} });
+    if (!r.ok) alert("loadout failed: " + (r.error || "?"));
+  } catch (e) {
+    alert("loadout failed: " + (e.message || e));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 async function qudCyberLicense() {
   const btn = $("qud-cyberlicense");
   const n = parseInt($("cyber-licenses").value || "0", 10);
@@ -1221,6 +1239,7 @@ async function init() {
   $("qud-godmode").onclick = qudGodmode;
   $("qud-xp").onclick = qudXp;
   $("qud-cyberchest").onclick = qudCyberChest;
+  $("qud-loadout").onclick = qudLoadout;
   $("qud-cyberlicense").onclick = qudCyberLicense;
   $("qud-back").onclick = qudBack;
   $("hv-abort").onclick = async () => {

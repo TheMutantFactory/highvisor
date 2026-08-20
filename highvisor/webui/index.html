@@ -77,6 +77,10 @@
                     title="spawn a chest on an adjacent cell holding EVERY implant blueprint plus a stack of credit wedges. Qud must be in-game with the terminal CLOSED — this runs on the turn-thread path, which a parked screen blocks (the mod will refuse it out loud).">🧰 Qud: cybernetics chest</button>
           </div>
           <div class="layout-row">
+            <button id="qud-loadout" class="full"
+                    title="spawn a Chest at your feet holding one of EVERY weapon and every kind of ammo, plus enough spheres of negative weight to cancel the load (Suspensor subtracts 200% of its own 10 lb, so each sphere is -10 lb net and the count is computed from the total, not guessed). Qud must be in-game with no popup up — this is the turn-thread path, which a parked screen blocks.">🗡️ Qud: weapons + ammo chest</button>
+          </div>
+          <div class="layout-row">
             <input id="cyber-licenses" type="number" value="10" min="1"
                    title="licence TIERS to add. Not an item: `CyberneticsLicenses` is an int property on the player, and Qud's own Upgrade Your License is ModIntProperty(...,1) after it destroys the wedges it charged you. Points Used and Remaining are derived, so they are not settable.">
             <button id="qud-cyberlicense" class="full"
