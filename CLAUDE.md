@@ -14,7 +14,7 @@ fix compounds. Concretely:
 | instead of… | use |
 |---|---|
 | `open <app>.app` / steam URL | `hv launch raves` (pair), `hv launch raves_solo` / `qud_solo`, or the cockpit ▶ buttons |
-| AppleScript / manual window moves | `hv move` (readback-verified), cockpit slot buttons |
+| AppleScript / manual window moves | `hv layout loop` (the working stage: both apps on the EXTERNAL monitor) or `hv layout pair` (capture geometry, both 1920x1080, no overlap — the parity baseline). `hv layouts` lists them. `hv move` with explicit coords is the last resort, not the first: it is how Raves keeps ending up on the laptop screen |
 | screenshot-then-guess "what screen is it on?" | `hv state` (first-party scene reports), `hv probe` |
 | click-drive to a known screen by hand | `hv goto <app> <node>` (planned route over the transition graph) |
 | guessing what a goto will do | `hv plan <app> <node> [--from <state>]` — the route, driving nothing |
@@ -266,6 +266,14 @@ tree and silently dropped by the engine, so a step written with one ran UNCONDIT
 reading, to anyone maintaining `gametree.json`, as though it were guarded. Worse than the `os` case
 `selftest_plan.py` covers: it does the thing rather than nothing. `tools/selftest_steps.py` guards
 both features — run it with any change to step gating or assert conditions.
+
+**Some windows cannot be moved through AX, and placement must pick the channel per window.**
+Raves is a borderless Godot window: AX sets either fail or land at wild coordinates. It self-places
+by polling `window_rect.json`, which highvisor writes (the reverse direction of its state-report
+contract). `Engine._place` is the ONE place that decides, and every route into a move — `hv move`,
+`hv dock`, `stack`, every layout — goes through it. It used to live inside `stack` alone, so
+everything else silently did nothing to Raves: `hv layout loop` reported "move did not land" and
+placed 1 of 5, which reads as a broken layout rather than a window wanting a different channel.
 
 ## Gotchas
 

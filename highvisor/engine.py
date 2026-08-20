@@ -271,7 +271,10 @@ class Engine:
             else:
                 x, y, w, h = (int(req["x"]), int(req["y"]),
                               int(req["w"]), int(req["h"]))
-            return b.move(req["target"], x, y, w, h, topmost).to_dict()
+            tgt = self._find_win(b.list_targets(), req["target"])
+            return self._place(b, (tgt.id if tgt else req["target"]),
+                               (tgt.title if tgt else str(req["target"])),
+                               x, y, w, h, topmost).to_dict()
 
         if op == P.OP_STACK:
             return self._stack_above(b, req.get("top"), req.get("bottom"),
@@ -440,18 +443,40 @@ class Engine:
             return {"ok": False, "error": "%r not found" % top_label}
         x, w, h = bot.x, bot.w, bot.h            # same column + size as the anchor
         y = bot.y - gap - h                      # stacked directly above it
-        if "raves of qud" in (top.title or "").lower():
-            # Godot's borderless window can't be moved via AX (sets land at wild
-            # coords or fail) — ask Raves to place ITSELF: write window_rect.json
-            # (the reverse of its state-report contract), verify by CG readback.
-            r2 = self._move_raves_file(b, top.id, int(x), int(y), int(w), int(h))
-            if r2.get("ok"):
-                return {"ok": True, "top": top.id, "bottom": bot.id,
-                        "rect": [int(x), int(y), int(w), int(h)], "via": "file"}
-            # fall through to the AX attempt as a last resort
-        r = b.move(top.id, int(x), int(y), int(w), int(h), None)
+        r = self._place(b, top.id, top.title, int(x), int(y), int(w), int(h), None)
         return {"ok": r.ok, "top": top.id, "bottom": bot.id,
                 "rect": [int(x), int(y), int(w), int(h)], "error": r.error}
+
+    # ---------------------------------------------------------------- placement
+
+    SELF_PLACING = ("raves of qud",)
+
+    def _place(self, b, win_id, title, x, y, w, h, topmost=None):
+        """Move ONE window, by whichever channel that window actually obeys.
+
+        Godot's borderless window cannot be moved through the accessibility layer -- AX sets
+        either fail or land at wild coordinates -- so Raves is asked to place ITSELF: highvisor
+        writes window_rect.json and Settings.gd applies it with DisplayServer within ~0.5s (the
+        reverse direction of its state-report contract).
+
+        This lives in ONE place because it was in exactly one CALLER before, `stack`, and every
+        other route into a move -- `hv move`, `hv dock`, and every layout -- went straight to AX
+        and silently did nothing to Raves. `hv layout loop` reported "move did not land" and
+        placed 1 of 5, which reads as a broken layout rather than a window that needs a different
+        channel; and I had been working around it by passing explicit coordinates, which is how
+        Raves kept ending up on the laptop screen instead of the external monitor.
+        """
+        if any(k in (title or "").lower() for k in Engine.SELF_PLACING):
+            r2 = self._move_raves_file(b, win_id, int(x), int(y), int(w), int(h))
+            if r2.get("ok"):
+                class _R:  # the same shape b.move() returns, so callers need no special case
+                    ok, error, detail = True, None, "placed via window_rect.json"
+                    def to_dict(self_):
+                        return {"ok": True, "detail": _R.detail,
+                                "rect": [int(x), int(y), int(w), int(h)], "via": "file"}
+                return _R()
+            # fall through to AX as a last resort -- it may be a differently-built window
+        return b.move(win_id, int(x), int(y), int(w), int(h), topmost)
 
     def _move_raves_file(self, b, win_id, x, y, w, h, timeout_s=6.0):
         """Placement via Raves' window_rect.json poll (Settings.gd applies it with
@@ -2665,7 +2690,7 @@ class Engine:
                 results.append({"match": pl.get("match"), "target": win.id,
                                 "ok": False, "error": str(e)})
                 continue
-            r = b.move(win.id, x, y, w, h, pl.get("topmost"))
+            r = self._place(b, win.id, win.title, x, y, w, h, pl.get("topmost"))
             results.append({"match": pl.get("match"), "target": win.id,
                             "title": win.title, "ok": r.ok,
                             "rect": [x, y, w, h], "error": r.error})
