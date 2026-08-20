@@ -255,6 +255,18 @@ def _cmd_assert(a):
         req["present"] = a.present == "yes"
     if a.ocr_contains:
         req["ocr_contains"] = a.ocr_contains
+    if a.report:
+        # k=v pairs against the app's own report. Bare "k" (or "k=true") means "present and
+        # truthy", "k=false" means "absent or falsy"; anything else compares as a string.
+        rep = {}
+        for item in a.report:
+            k, _, v = item.partition("=")
+            k = k.strip()
+            if not k:
+                continue
+            v = v.strip()
+            rep[k] = True if v in ("", "true") else (False if v == "false" else v)
+        req["report"] = rep
     res = _call(req)
     _print_json(res)
     raise SystemExit(0 if res.get("ok") and res.get("passed") else 1)
@@ -1098,6 +1110,11 @@ def build_parser():
                    help="a popup must be up (optionally of this type, e.g. message | yesno | input)")
     s.add_argument("--present", choices=["yes", "no"], help="window present / absent")
     s.add_argument("--ocr-contains", dest="ocr_contains", help="window OCR must contain this text")
+    s.add_argument("--report", action="append", metavar="KEY[=VALUE]",
+                   help="the app's OWN report must carry this (repeatable). Bare KEY or "
+                        "KEY=true means present and truthy; KEY=false means absent or falsy; "
+                        "otherwise compared as a string. e.g. --report snap_ts (Raves has "
+                        "received a snapshot, i.e. it is attached to a LIVE game)")
     s.add_argument("--timeout", type=float, default=10.0)
     s.set_defaults(fn=_cmd_assert)
 

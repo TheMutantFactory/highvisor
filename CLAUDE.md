@@ -243,6 +243,30 @@ verify could not fail and `hv goto` reported success having moved nothing. Two w
 edge whose target CONTAINS its origin, so climbing edges are honest without being authored
 that way. Guarded by `tools/selftest_evaluate.py`.
 
+**Conditions can read the app's OWN report, not just its scene.** `--report KEY[=VALUE]`
+(repeatable) matches the dict `hv state` shows as `extra`: bare `KEY` or `KEY=true` means present
+and truthy, `KEY=false` means absent or falsy, anything else compares as a string. This is the
+general form of the rule the tree already lives by — when a driver needs to know something, teach
+the app to REPORT it and condition on the report, instead of inferring it from a screen or waiting
+out a sleep. `hv assert --app raves --report game_live=true` is the worked example: it replaced a
+2.5s guess in the `title -> in_game` edge and returns in 0.01s.
+
+**Steps take `requires` now, and it is STRICTER than the planner's.** `requires` on a whole edge
+is filtered by `plan.py`, where an UNKNOWN signal PASSES (refusing to plan because we did not poll
+something is worse than trying an edge that verifies its own arrival). On a single step the guarded
+thing IS the action, so unknown means DON'T — the actions worth guarding are the ones you cannot
+take back. Signals resolve across BOTH apps, because the interesting ones belong to the pair:
+`game_live` is a probe of Qud's bridge and is structurally `None` on Raves' profile, so a raves
+step asking for it would otherwise guard on a value that can never be known. An `assert` step may
+also carry `"optional": true` to make it a soft WAIT — block until the condition holds, but do not
+make the edge depend on it.
+
+**This one was ignored before it was implemented.** A step-level `requires` was accepted by the
+tree and silently dropped by the engine, so a step written with one ran UNCONDITIONALLY while
+reading, to anyone maintaining `gametree.json`, as though it were guarded. Worse than the `os` case
+`selftest_plan.py` covers: it does the thing rather than nothing. `tools/selftest_steps.py` guards
+both features — run it with any change to step gating or assert conditions.
+
 ## Gotchas
 
 - `hv move` verifies by READBACK (CG window frame) — raw AX error codes lie for Godot's

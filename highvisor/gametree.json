@@ -2239,8 +2239,15 @@
           "activate": "Raves of Qud"
         },
         {
-          "sleep": 2.5,
-          "note": "let Continue enable (heartbeat poll) after a fresh launch"
+          "assert": {
+            "app": "raves",
+            "report": {
+              "game_live": "true"
+            }
+          },
+          "timeout": 8,
+          "optional": true,
+          "note": "WAIT FOR THE SIGNAL, DO NOT SLEEP AT IT. Raves' Continue BRANCHES: with a live game it attaches to it, without one it opens the LOAD GAME picker. It is still ENABLED either way (a save on disk is enough to light it -- MainMenu._refresh_enabled), so clicking too early does not fail, it takes the WRONG BRANCH and offers to load a save over a running game. `game_live` is MainMenu's own answer, reported from the title screen for exactly this (Raves UiState.set_game_live). The 2.5s sleep this replaces was a guess at how long the mod's connect-snapshot takes to arrive. OPTIONAL because a genuinely dead game must still reach the picker -- a better sleep, not a precondition. NB `snap_ts` is NOT the signal: the viewer writes it, so at the title it is absent whether or not a game is live."
         },
         {
           "click_text": "Continue",
@@ -2267,14 +2274,34 @@
             "scene": "loadgame",
             "key": "space"
           },
-          "note": "CONDITIONAL: Continue opens the LOAD GAME picker when there is a choice to make and goes straight in-game when there is not, so this presses the picker's [Space] select only if we actually landed there."
+          "requires": {
+            "game_live": false
+          },
+          "note": "CONDITIONAL, AND NOW ALSO GUARDED ON THERE BEING NO LIVE GAME. Continue opens this picker when there is a choice to make and goes straight in-game when there is not, so the space was always conditional on the scene. What it was NOT conditional on is whether a game is already running -- and pressing select here then asks the mod to load a save over it. The mod refuses that (LoadSave.cs: 'a game is running'), so the edge dead-ends on the picker rather than corrupting anything, but the failure is silent and reads as 'Continue did nothing'. With a live game the right move is to leave the picker alone and let the step below re-try the attach."
+        },
+        {
+          "dismiss": {
+            "scene": "loadgame",
+            "key": "Escape"
+          },
+          "requires": {
+            "game_live": true
+          },
+          "note": "BACK OUT, THEN ATTACH. Reaching the picker with a live game means the click won the race against the first snapshot. Escape returns to the title; by now the snapshot has landed, so the retry below takes the attach branch."
+        },
+        {
+          "dismiss": {
+            "scene": "title",
+            "key": "space"
+          },
+          "note": "RE-ACTIVATE Continue after backing out of the picker. No-op unless we are still on the title."
         }
       ],
       "verify": {
         "node": "in_game"
       },
       "timeout": 30,
-      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || Continue is CLICKED, not selected with arrow keys. The keyboard form assumed the selection starts on New Game and stepped down once — but Raves REMEMBERS the menu selection, so after any earlier navigation that single `down` lands somewhere else and `space` activates the wrong row (or nothing). Verified live: arrow keys do move the selection, so this was never a key-delivery problem; it was a relative move against an unknown starting point. A click is position-independent. Continue measured at (958,578) at 1920x1080. "
+      "note": "PER-OS. click_text needs OCR and only backends/darwin.py implements one, so on Windows this edge failed with `ocr failed:`. macOS keeps clicking by LABEL -- CLAUDE.md: fixed coords started stray games twice when the menu reflowed. Both forms are correct on their own machine; neither is a fallback for the other. || Continue is CLICKED, not selected with arrow keys. The keyboard form assumed the selection starts on New Game and stepped down once — but Raves REMEMBERS the menu selection, so after any earlier navigation that single `down` lands somewhere else and `space` activates the wrong row (or nothing). Verified live: arrow keys do move the selection, so this was never a key-delivery problem; it was a relative move against an unknown starting point. A click is position-independent. Continue measured at (958,578) at 1920x1080.  || 2026-08-19: the 2.5s sleep is now a wait on Raves' own snap_ts, and the picker's select is guarded on there being no live game. Clicking Continue before the first snapshot lands opens the save picker over a running game -- a race, which is why it bit once and would not reproduce on demand."
     },
     {
       "app": "raves",

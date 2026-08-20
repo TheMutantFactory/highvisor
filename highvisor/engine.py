@@ -1536,11 +1536,19 @@ class Engine:
           popup:          true = any popup up (state-file ``popup`` key), or a popup type
           present:        window presence equals this bool
           ocr_contains:   the app window's OCR contains this substring (heavy — forces OCR)
+          report:         {key: value} over the app's OWN first-party report — the same
+                          dict `hv state` shows as `extra` (Raves: mode/snap_ts/ui_age/…,
+                          Qud's mod: whatever its heartbeat writes). `true` means "present
+                          and truthy", `false` means "absent or falsy", anything else is
+                          compared as a string. This is the general form of the rule the
+                          tree already lives by: when detection needs to know something,
+                          have the app REPORT it and condition on the report, rather than
+                          inferring it from a screen or waiting out a sleep.
         ``ok`` = the op ran; ``passed`` = the assertion's verdict."""
         import time
         app = req.get("app")
         want = {k: req[k] for k in ("node", "scene", "popup", "present", "ocr_contains",
-                                    "not_within") if k in req and req[k] is not None}
+                                    "not_within", "report") if k in req and req[k] is not None}
         if req.get("exact"):
             want["exact"] = True   # a MODIFIER on `node`, not a condition of its own
         if not app or not [k for k in want if k != "exact"]:
@@ -1613,6 +1621,23 @@ class Engine:
             # so tools/selftest_evaluate.py can exercise it with no daemon and no instance.
             if not Engine._popup_matches((st.get("extra") or {}).get("popup"), want["popup"]):
                 return False
+        if "report" in want:
+            # The app's own report, which is the most trustworthy signal we have -- but only
+            # a POSITIVE one. A key that is absent because the reporter is broken looks
+            # exactly like a key that is absent because the thing is not true (highvisor's
+            # CLAUDE.md: keep the positives, distrust the negatives), so `false` here means
+            # "not currently reporting it" and must not be read as proof of the opposite.
+            extra = st.get("extra") or {}
+            for key, val in (want["report"] or {}).items():
+                got = extra.get(key)
+                if val is True:
+                    if not got:
+                        return False
+                elif val is False:
+                    if got:
+                        return False
+                elif str(got) != str(val):
+                    return False
         if "ocr_contains" in want:
             # _gamestate stored no raw text; re-derive from the evaluate input is overkill —
             # OCR the window directly (need_ocr already made the poll heavy anyway).
@@ -2095,6 +2120,39 @@ class Engine:
         return {"ok": True, "app": app, "node": node_id, "steps": steps,
                 "route": route_label, "planned": False, "state": _slim_state(st)}
 
+    @staticmethod
+    def _merge_signals(states, app):
+        """One signal view across BOTH apps, the step's own first.
+
+        The signals worth guarding a step on are properties of the PAIR, not of a window:
+        `game_live` is a probe of Qud's bridge, so it is None on Raves' profile (no port) and a
+        raves step asking for it would be guarding on a value that is structurally always unknown.
+        """
+        merged = {}
+        for src in [app] + [a for a in (states or {}) if a != app]:
+            for k, v in ((states.get(src) or {}).get("signals") or {}).items():
+                if merged.get(k) is None and v is not None:
+                    merged[k] = v
+        return merged
+
+    @staticmethod
+    def _step_requires_unmet(requires, signals):
+        """Which of a STEP's `requires` do not hold -> {} when it may run.
+
+        STRICTER THAN THE PLANNER'S COPY, deliberately. plan.py::_requires_hold lets an UNKNOWN
+        signal pass, which is right when choosing a route: refusing to plan because we did not
+        poll something is worse than trying an edge that verifies its own arrival. Here the
+        guarded step IS the action, and the actions worth guarding are the ones you cannot take
+        back -- "press select on the save picker" must not fire because we could not tell whether
+        a game was live. Unknown means DON'T.
+        """
+        out = {}
+        for k, want in (requires or {}).items():
+            have = (signals or {}).get(k)
+            if have is None or bool(have) != bool(want):
+                out[k] = have
+        return out
+
     def _run_step(self, b, app, tree, step, _depth=0):
         """Execute ONE step of a transition or a legacy recipe -> {ok, detail?, error?}.
 
@@ -2122,6 +2180,37 @@ class Engine:
         # OK while doing nothing -- the failure family this codebase keeps rediscovering.
         if "os" in step and step["os"] != _os.name:
             return {"ok": True, "detail": "skipped (os=%s, here=%s)" % (step["os"], _os.name)}
+
+        # PER-STEP `requires`, evaluated against the LIVE signals — the same block the planner
+        # already applies to a whole EDGE (plan.py::_requires_hold), now usable on one step of
+        # one. An edge sometimes has to do different things depending on state it cannot know
+        # until it gets there: whether a game is live decides whether Raves' load picker should
+        # be confirmed or backed out of, and that is one edge with two arms, not two edges.
+        #
+        # This block is why the feature had to be REAL rather than assumed: `requires` on a step
+        # was silently ignored before, so a step written with one would run unconditionally while
+        # reading, to anyone maintaining the tree, as if it were guarded. That is the same
+        # skips-itself-and-reports-ok family the `os` note above exists for, only worse — it does
+        # the thing rather than nothing. An UNKNOWN signal (None) does NOT satisfy a requirement:
+        # if we cannot tell, we do not fire a guarded step.
+        if "requires" in step:
+            # STRICTER THAN THE PLANNER'S COPY, and deliberately. plan.py::_requires_hold lets an
+            # UNKNOWN signal pass, which is right when choosing a route -- refusing to plan
+            # because we did not poll something is worse than trying an edge that verifies its own
+            # arrival. Here the guarded step is the ACTION, and the actions worth guarding are the
+            # ones you cannot take back: "press select on the save picker" must not fire because
+            # we could not tell whether a game was live. Unknown means DON'T.
+            #
+            # Signals are resolved ACROSS apps, because the interesting ones are properties of the
+            # pair rather than of a window: `game_live` is a probe of Qud's bridge, so it is None
+            # on Raves' profile (no port) and a raves edge asking for it would otherwise be
+            # guarding on a value that is structurally always unknown.
+            states = (self._gamestate(b).get("states") or {})
+            merged = Engine._merge_signals(states, app)
+            unmet = Engine._step_requires_unmet(step["requires"], merged)
+            if unmet:
+                return {"ok": True, "detail": "skipped (requires %s, have %s)"
+                        % (step["requires"], unmet)}
 
         try:
             if "goto" in step:
@@ -2344,6 +2433,12 @@ class Engine:
                 a.setdefault("app", app)
                 a["timeout"] = step.get("timeout", a.get("timeout", 15))
                 r = self._assert_state(b, a)
+                if not r.get("passed") and step.get("optional"):
+                    # A SOFT WAIT: block until the condition holds, but do not make the edge
+                    # depend on it. For "wait until the app is ready" the condition is a
+                    # better sleep, not a precondition -- the edge must still work in the
+                    # case where it legitimately never becomes true.
+                    return _step_ok(True, "waited for %s (not met; continuing)" % (a,))
                 if not r.get("passed"):
                     act = r.get("actual") or {}
                     # NAME the modal. The label alone reads "In-Game" for every stage of a
