@@ -564,7 +564,10 @@ async function qudLoadout() {
   const btn = $("qud-loadout");
   btn.disabled = true;
   try {
-    const r = await rpc("qudbridge", { name: "loadout", args: {} });
+    // The category is the whole point of the dropdown: "everything wieldable" is 1732 objects,
+    // which Daniel found too much for Qud and Raves both. Pass whatever is selected.
+    const cat = ($("loadout-cat") && $("loadout-cat").value) || "loadout";
+    const r = await rpc("qudbridge", { name: "loadout", args: { cat } });
     if (!r.ok) alert("loadout failed: " + (r.error || "?"));
   } catch (e) {
     alert("loadout failed: " + (e.message || e));

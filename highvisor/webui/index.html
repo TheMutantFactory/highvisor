@@ -81,8 +81,20 @@
                     title="mark every blueprint known and strip the unidentified disguise from everything you carry, everything in the zone, and the contents of every container in it — so a chest of 1700 things is one you can actually shop in. Qud must be in-game with no popup up.">🔎 Qud: identify everything</button>
           </div>
           <div class="layout-row">
+            <select id="loadout-cat"
+                    title="what goes in the chest. The whole armoury is 1732 objects, which is more than Qud or Raves wants to hold — pick a slice.">
+              <option value="missile">missile weapons (~60)</option>
+              <option value="grenades">grenades (~60)</option>
+              <option value="ammo">ammo</option>
+              <option value="armor">armor (~300)</option>
+              <option value="melee">melee weapons (~400)</option>
+              <option value="implants">cybernetic implants</option>
+              <option value="food">food</option>
+              <option value="items">other items</option>
+              <option value="loadout">EVERYTHING wieldable (~1700, slow)</option>
+            </select>
             <button id="qud-loadout" class="full"
-                    title="spawn a Chest at your feet holding one of EVERY weapon and every kind of ammo, plus enough spheres of negative weight to cancel the load (Suspensor subtracts 200% of its own 10 lb, so each sphere is -10 lb net and the count is computed from the total, not guessed). Qud must be in-game with no popup up — this is the turn-thread path, which a parked screen blocks.">🗡️ Qud: weapons + ammo chest</button>
+                    title="spawn a Chest at your feet holding one of every blueprint in the category on the left, plus spheres of negative weight to cancel the load (Suspensor subtracts 200% of its own 10 lb, so each sphere is -10 lb net and the count is computed from the total, not guessed). Qud must be in-game with no popup up — this is the turn-thread path, which a parked screen blocks.">🗡️ Qud: weapons + ammo chest</button>
           </div>
           <div class="layout-row">
             <input id="cyber-licenses" type="number" value="10" min="1"
