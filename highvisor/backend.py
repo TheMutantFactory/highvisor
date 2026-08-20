@@ -66,10 +66,18 @@ class ActionResult:
     tier: Optional[int] = None
     detail: str = ""
     error: Optional[str] = None
+    #: Structured observations the caller may branch on. `detail` is prose for a human;
+    #: anything a CALLER needs to act upon belongs here, because a fact buried in a
+    #: sentence gets read straight past — `activate` reported "frontmost unconfirmed"
+    #: in its detail for months and every consumer, including me, checked only `ok`.
+    data: Optional[dict] = None
 
     def to_dict(self):
-        return {"ok": self.ok, "tier": self.tier,
-                "detail": self.detail, "error": self.error}
+        d = {"ok": self.ok, "tier": self.tier,
+             "detail": self.detail, "error": self.error}
+        if self.data:
+            d.update(self.data)
+        return d
 
     @classmethod
     def fail(cls, error):

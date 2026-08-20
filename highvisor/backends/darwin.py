@@ -54,6 +54,7 @@ _VALUE, _POS, _SIZE = "AXValue", "AXPosition", "AXSize"
 _CHILDREN, _WINDOWS = "AXChildren", "AXWindows"
 _FOCUSED_ELEM = "AXFocusedUIElement"
 _PRESS, _RAISE = "AXPress", "AXRaise"
+_FRONTMOST = "AXFrontmost"
 _EDITABLE_ROLES = ("AXTextArea", "AXTextField", "AXComboBox")
 
 # key name -> macOS virtual keycode (for CGEventCreateKeyboardEvent).
@@ -742,13 +743,58 @@ class MacBackend(PlatformBackend):
         # failure built on that turns working routes into broken ones, which is exactly what
         # it did to `raves within(status_screens)->in_game` before this was walked back.
         #
-        # So: say what was observed and let the step's own verify decide. What actually
-        # bit here was never activation at all -- it was the two windows OVERLAPPING, so
-        # Qud's toolbar click landed inside the Raves window (measured: 124px of overlap,
-        # click at global y=-1130 inside Raves' -2156..-1076). Focus was the wrong suspect.
+        # SECOND PATH, when the cooperative one was refused -- AND IT DOES NOT WORK EITHER ON
+        # DARWIN 25.5, measured 2026-08-19. Kept, with that written down, so the next person does
+        # not spend the afternoon rediscovering it.
+        #
+        # The block above fails silently by DESIGN on modern macOS: activateFromApplication_
+        # hands focus over from the CALLER, and the caller is a background daemon that is never
+        # itself frontmost, so the system has nothing to hand over and returns YES having done
+        # nothing. Accessibility is a separate grant with separate rules, so setting AXFrontmost
+        # on the application element looked like the way around it. It is not: with the input
+        # grant in place (clicks and keys land fine) the attribute set is accepted and the
+        # frontmost app does not change. macOS simply will not let a background process take
+        # focus, by either route.
+        #
+        # What this costs, and why it kept mattering: an unfocused Godot throttles its repaint,
+        # so a burst of screenshots comes back byte-identical and reads as "the particles are not
+        # animating". Several rounds of fire/smoke work were verified against a window that was
+        # not redrawing. If a visual check NEEDS focus, the honest options are the guard's
+        # `guard_off` switch (steals the machine, so it is the user's call) or having the person
+        # at the keyboard look -- not another activation trick.
+        if not landed:
+            axapp = AXUIElementCreateApplication(want)
+            if axapp is not None:
+                AXUIElementSetAttributeValue(axapp, _FRONTMOST, True)
+                axw, _p = self._ax_window(w)
+                if axw is not None:
+                    AXUIElementPerformAction(axw, _RAISE)
+                deadline = time.time() + 0.8
+                while time.time() < deadline:
+                    front = NSWorkspace.sharedWorkspace().frontmostApplication()
+                    if front is not None and int(front.processIdentifier()) == want:
+                        landed = True
+                        break
+                    time.sleep(0.05)
+
+        # REPORTED AS A FIELD, not only as prose. `ok` stays true either way -- see the note
+        # above: a hard failure on this readback was tried and walked back, because it turned
+        # working routes into broken ones. But "activated (frontmost unconfirmed)" buried in a
+        # detail string is a fact a caller can read straight past, and I did, for several rounds
+        # of "why is nothing animating". `frontmost` is now a bool the caller can branch on, and
+        # `frontmost_app` names who actually holds focus, so an unconfirmed activation says WHAT
+        # it lost to instead of just that it lost.
+        fa = NSWorkspace.sharedWorkspace().frontmostApplication()
+        who = ""
+        try:
+            who = str(fa.localizedName()) if fa is not None else ""
+        except Exception:
+            who = ""
         return ActionResult(ok=True, tier=4,
-                            detail="activated (frontmost %s)"
-                                   % ("confirmed" if landed else "unconfirmed"))
+                            detail="activated (frontmost %s%s)"
+                                   % ("confirmed" if landed else "UNCONFIRMED",
+                                      "" if landed else ", %s has focus" % (who or "unknown")),
+                            data={"frontmost": bool(landed), "frontmost_app": who})
 
     def move(self, target: str, x: int, y: int, w: int, h: int,
              topmost: Optional[bool] = None) -> ActionResult:

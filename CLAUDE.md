@@ -277,6 +277,21 @@ placed 1 of 5, which reads as a broken layout rather than a window wanting a dif
 
 ## Gotchas
 
+- **`hv activate` cannot take focus, and now says so in a field.** macOS will not let a background
+  process become frontmost: `activateFromApplication_` hands focus over from the CALLER, and the
+  daemon is never itself frontmost, so it returns YES having done nothing. The Accessibility route
+  (`AXFrontmost` on the app element) is accepted and equally ineffective — measured on Darwin 25.5
+  with the input grant in place, clicks and keys landing fine. `ok` stays true either way, because
+  failing the op hard was tried once and turned working routes into broken ones. What changed is
+  that the readback is a FIELD now: `frontmost` (bool) and `frontmost_app` (who actually has it),
+  and the CLI prints a `!!` block when it did not land. It had been reporting
+  `detail: "activated (frontmost unconfirmed)"` for months and every consumer, including me,
+  checked only `ok` — a fact buried in prose is a fact nobody reads. **What it costs: an unfocused
+  Godot throttles its repaint**, so a burst of screenshots comes back byte-identical and reads as
+  "the animation is not running". If a visual check needs focus, the honest options are
+  `touch ~/.config/highvisor/guard_off` (steals the machine — the user's call) or a human clicking
+  the window. Not another activation trick.
+
 - `hv move` verifies by READBACK (CG window frame) — raw AX error codes lie for Godot's
   borderless window (kAXErrorFailure from sets that landed, and vice versa).
 - **A click's `detail` echoes the button you ASKED for, not the events sent** — it is built from

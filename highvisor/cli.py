@@ -170,7 +170,21 @@ def _cmd_drag(a):
 
 
 def _cmd_activate(a):
-    _print_json(_call({"op": P.OP_ACTIVATE, "target": a.target}))
+    r = _call({"op": P.OP_ACTIVATE, "target": a.target})
+    _print_json(r)
+    # SHOUT WHEN IT DID NOT LAND, the way `hv state` shouts about a stale report. macOS will not
+    # let a background daemon take focus (see backends/darwin.py::activate), so an unconfirmed
+    # activation is COMMON, not exceptional -- and `ok` is true either way, because failing the
+    # op hard was tried once and broke working routes. A caller that reads only `ok` therefore
+    # gets a success for a no-op, which is exactly how several visual checks ended up run against
+    # a window that was never focused and, being Godot, was not repainting.
+    if r.get("ok") and r.get("frontmost") is False:
+        who = r.get("frontmost_app") or "another app"
+        print("\n!! focus did NOT change — %s still has it. macOS refuses focus to a background\n"
+              "   process; anything that needs a repainting window (screenshots of an animation,\n"
+              "   OCR of a Unity screen) will read a STALE frame. Options: have someone click the\n"
+              "   window, or `touch ~/.config/highvisor/guard_off` for an unattended run." % who)
+    return 0 if r.get("ok") else 1
 
 
 def _cmd_inspect(a):
