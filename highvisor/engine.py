@@ -371,7 +371,10 @@ class Engine:
 
         if op == P.OP_LAUNCH:
             from .launch import resolve_launch
-            spec, largs = resolve_launch(req.get("name", ""))
+            try:
+                spec, largs = resolve_launch(req.get("name", ""))
+            except KeyError as e:
+                return {"ok": False, "error": str(e.args[0] if e.args else e)}
             if not spec:
                 return {"ok": False, "error": "no launcher/spec %r" % req.get("name")}
             before = {t.id for t in b.list_targets()}
@@ -1073,7 +1076,10 @@ class Engine:
                 break
             _t.sleep(0.5)
         from .launch import resolve_launch
-        spec, largs = resolve_launch(launcher)
+        try:
+            spec, largs = resolve_launch(launcher)
+        except KeyError as e:
+            return {"ok": False, "error": str(e.args[0] if e.args else e)}
         if not spec:
             return {"ok": False, "error": "no launcher %r" % launcher}
         launched_at = _t.time()
@@ -2263,7 +2269,10 @@ class Engine:
                 if step.get("unless_running") and self._find_win(b.list_targets(), cfg.get("window")):
                     return {"ok": True, "detail": "already running"}
                 from .launch import resolve_launch
-                spec, largs = resolve_launch(step["launch"])
+                try:
+                    spec, largs = resolve_launch(step["launch"])
+                except KeyError as e:
+                    return {"ok": False, "error": str(e.args[0] if e.args else e)}
                 if not spec:
                     return {"ok": False, "error": "no launcher %r" % step["launch"]}
                 r = b.launch(spec, largs)

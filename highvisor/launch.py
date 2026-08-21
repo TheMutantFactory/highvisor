@@ -44,8 +44,24 @@ def resolve_launch(name_or_spec: str):
     """``(open_target, args)`` for a launcher name. An entry may be a bare spec
     string (no args) or an object ``{"open": <spec>, "args": [...]}`` — the object
     form lets a launcher pass extra argv to the program (e.g. Raves telling Caves
-    of Qud to open borderless). An unknown name is treated as a literal spec."""
-    entry = load_launchers().get(name_or_spec, name_or_spec)
+    of Qud to open borderless). An unknown name is treated as a literal spec, EXCEPT
+    when it differs from a saved name only by case -- that is a typo, and is raised."""
+    saved = load_launchers()
+    entry = saved.get(name_or_spec)
+    if entry is None:
+        # Not a saved name. Before falling through to "it must be an OS spec", check whether it
+        # is a saved name spelled wrong -- a bare word with no scheme, no path and no .app can
+        # only be an app NAME, and `hv launch raves_USER` (saved: `raves_user`) went out as
+        # `open -a raves_USER` and started nothing. Case is the whole of that mistake, so match
+        # case-insensitively and hand back the real name rather than a guess.
+        bare = ("://" not in name_or_spec and "/" not in name_or_spec
+                and not name_or_spec.endswith(".app"))
+        if bare:
+            for k in saved:
+                if k.lower() == name_or_spec.lower():
+                    raise KeyError("no launcher %r -- did you mean %r? (hv launchers lists them)"
+                                   % (name_or_spec, k))
+        entry = name_or_spec
     if isinstance(entry, dict):
         return str(entry.get("open", "")), [str(a) for a in entry.get("args", [])]
     return str(entry), []

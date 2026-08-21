@@ -95,6 +95,10 @@ def _split_mods(spec):
     return [m.strip().lower() for m in str(spec or "").replace("+", ",").split(",") if m.strip()]
 
 
+# How long to give `open` to report a bad spec before assuming a slow cold start. It normally
+# exits in well under a second; this is the ceiling, not the expected cost.
+LAUNCH_WAIT_S = 4.0
+
 class MacBackend(PlatformBackend):
     name = "macos"
 
@@ -304,10 +308,25 @@ class MacBackend(PlatformBackend):
             # Everything after --args is forwarded to the program's argv. Raves
             # reads these (`-- --launch-qud <coq> …`) to spawn Caves of Qud itself.
             cmd += ["--args"] + args
+        # WAIT for `open`, do not fire-and-forget. It hands the launch to LaunchServices and
+        # exits promptly, so waiting costs nothing -- and NOT waiting means a spec that cannot
+        # resolve is reported as a success. `hv launch raves_USER` (the saved launcher is
+        # `raves_user`) returned ok=True, error=null and started nothing: Popen only fails if
+        # the `open` BINARY is missing, and open-couldn't-find-the-app is an exit code, on a
+        # process nobody reaped. A launch that reports ok while no app appears is the worst
+        # shape of check, because everything downstream then measures the app already running.
         try:
-            subprocess.Popen(cmd)
+            pr = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except Exception as e:
             return ActionResult.fail("launch failed: %s" % e)
+        try:
+            _, err = pr.communicate(timeout=LAUNCH_WAIT_S)
+        except subprocess.TimeoutExpired:
+            # Still going after the wait: a slow cold start, not a bad spec. Leave it running.
+            return ActionResult(ok=True, detail="open %s (still starting)" % " ".join(cmd[1:]))
+        if pr.returncode != 0:
+            msg = (err or b"").decode("utf-8", "replace").strip() or "exit %d" % pr.returncode
+            return ActionResult.fail("launch failed: %s" % msg)
         return ActionResult(ok=True, detail="open %s" % " ".join(cmd[1:]))
 
     def screen_size(self):
